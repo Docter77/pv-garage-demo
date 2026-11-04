@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="de">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'">
+<title>PV Flow + Garage Sonne Mond | Lokale Vorschau</title>
+<link rel="stylesheet" href="style.css">
+<header><div><h1>PV Flow <span>+ Garage Sonne Mond</span></h1><p>PV-Tageslauf &middot; Zeitraffer <output id="demo-clock" style="color:#55e4ce;font-variant-numeric:tabular-nums;white-space:nowrap">Tag 1 &middot; 06:00</output></p></div><div style="display:flex;gap:12px;flex-wrap:wrap"><label>Wetter <select id="scenario"><option value="sun">Sonnig</option><option value="cloud">Wechselhaft</option><option value="overcast">Bedeckt</option></select></label><label><input id="animate" type="checkbox" checked>Tageslauf</label></div></header>
+<main><section><h2>PV Flow</h2><pv-flow-lite-card></pv-flow-lite-card></section><section><h2>Garage Sonne Mond</h2><garage-sun-moon-demo></garage-sun-moon-demo></section></main>
+<footer>Beispielwerte und Demo-Standort. Originale Haus- und Batterie-Grafik. Keine Verbindung zu den echten Steuerungen.</footer>
+<script type="module" src="demo-day-main-v1.js"></script>
+</html>
