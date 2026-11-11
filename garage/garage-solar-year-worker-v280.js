@@ -11,11 +11,11 @@ const PLANET_SEGMENTS = PLANET_STEPS + 4;
 const PLANETS = ['mercury', 'venus', 'mars', 'jupiter'];
 
 export function calendarYearRange(startDate) {
-  if (typeof startDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) throw Error('Startdatum ungueltig');
+  if (typeof startDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) throw Error('Invalid start date');
   const date = new Date(startDate + 'T00:00:00Z'), start = +date;
-  if (!Number.isFinite(start) || date.toISOString().slice(0,10) !== startDate) throw Error('Startdatum ungueltig');
+  if (!Number.isFinite(start) || date.toISOString().slice(0,10) !== startDate) throw Error('Invalid start date');
   const year = date.getUTCFullYear(), month = date.getUTCMonth(), day = date.getUTCDate();
-  if (year < 1900 || year > 2200) throw Error('Jahr ungueltig');
+  if (year < 1900 || year > 2200) throw Error('Invalid year');
   // Calendar dates, not elapsed hours: DST cannot add or remove a preview day.
   const lastDay = new Date(Date.UTC(year + 1, month + 1, 0)).getUTCDate();
   const end = Date.UTC(year + 1, month, Math.min(day,lastDay));
@@ -83,7 +83,7 @@ function moonDay(start, end, latitude, longitude, day, output) {
   };
   const segment = (part, a, b) => {
     const count = output.moonCounts[day * 2 + part]++;
-    if (count >= MOON_SEGMENTS) throw Error('Zu viele Mondbahnabschnitte');
+    if (count >= MOON_SEGMENTS) throw Error('Too many moon path segments');
     const offset = ((day * 2 + part) * MOON_SEGMENTS + count) * 6;
     output.moonPositions.set(a.vector, offset);
     output.moonPositions.set(b.vector, offset + 3);
@@ -128,7 +128,7 @@ function position(time, latitude, longitude, output, offset) {
 
 export function buildSolarYear({ startDate, latitude, longitude, timeZone, planets = [] }) {
   if (!Number.isFinite(latitude) ||
-      Math.abs(latitude) > 90 || !Number.isFinite(longitude) || Math.abs(longitude) > 180) throw Error('Standort/Jahr ungueltig');
+      Math.abs(latitude) > 90 || !Number.isFinite(longitude) || Math.abs(longitude) > 180) throw Error('Invalid location/year');
   const formatter = new Intl.DateTimeFormat('en-GB', { timeZone, year:'numeric', month:'2-digit', day:'2-digit',
     hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23' });
   const { start, days, endDate } = calendarYearRange(startDate);

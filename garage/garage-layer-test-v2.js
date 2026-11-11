@@ -2,11 +2,11 @@ import { findPaintTestCards } from './garage-paint-test-v2.js';
 export { findPaintTestCards };
 
 const PHASES = [
-  { label: 'Original vorher', tags: [] },
-  { label: 'PV eigene Ebene', tags: ['pv-flow-card'] },
-  { label: 'Room eigene Ebene', tags: ['room-status-card'] },
-  { label: 'Beide eigene Ebenen', tags: ['pv-flow-card', 'room-status-card'] },
-  { label: 'Original nachher', tags: [] }
+  { label: 'Original before', tags: [] },
+  { label: 'PV separate layer', tags: ['pv-flow-card'] },
+  { label: 'Room separate layer', tags: ['room-status-card'] },
+  { label: 'Both separate layers', tags: ['pv-flow-card', 'room-status-card'] },
+  { label: 'Original after', tags: [] }
 ];
 let activeTest = null, serial = 0;
 
@@ -21,9 +21,9 @@ export function separatePaintLayers(cards) {
     for (const card of cards) {
       const wrapper = card.querySelector(':scope > ha-card > div');
       if (!wrapper || wrapper.children.length !== 1 || wrapper.children[0].localName !== 'svg') {
-        throw Error('Grafikrahmen nicht eindeutig: ' + card.localName);
+        throw Error('Graphics wrapper is ambiguous: ' + card.localName);
       }
-      if (getComputedStyle(wrapper).transform !== 'none') throw Error('Grafikrahmen bereits transformiert');
+      if (getComputedStyle(wrapper).transform !== 'none') throw Error('Graphics wrapper already transformed');
       const attr = 'data-garage-layer-test', key = 'layer-' + ++serial;
       const previous = card.getAttribute(attr), style = document.createElement('style');
       undo.push(() => {
@@ -71,19 +71,19 @@ export class GaragePaintTest {
     this.results = []; this.index = -1; this.running = false;
   }
   start() {
-    activeTest?.stop('Abgebrochen');
+    activeTest?.stop('Cancelled');
     activeTest = this; this.running = true;
     try {
       this.releaseBaseline = originalRoomLayers((this.cards.get('room-status-card') || []).filter(c => c.isConnected));
       this.advance();
-    } catch (_) { this.stop('Fehler: Test beendet'); }
+    } catch (_) { this.stop('Error: test stopped'); }
   }
   advance() {
     if (!this.running) return;
     try {
       this.release?.(); this.release = null;
       const phase = PHASES[++this.index];
-      if (!phase) { this.stop('Fertig'); return; }
+      if (!phase) { this.stop('Done'); return; }
       const groups = phase.tags.map(tag => (this.cards.get(tag) || []).filter(c => c.isConnected));
       if (groups.some(cards => !cards.length)) {
         this.results.push({ label: phase.label, missing: true }); this.advance(); return;
@@ -102,13 +102,13 @@ export class GaragePaintTest {
             try {
               this.results.push({ label: phase.label, cards: cards.length, seconds: (this.now() - this.started) / 1000, ...this.sample() });
               this.advance();
-            } catch (_) { this.stop('Fehler: Test beendet'); }
+            } catch (_) { this.stop('Error: test stopped'); }
           }, 20000);
-        } catch (_) { this.stop('Fehler: Test beendet'); }
+        } catch (_) { this.stop('Error: test stopped'); }
       }, 1000);
-    } catch (_) { this.stop('Fehler: Test beendet'); }
+    } catch (_) { this.stop('Error: test stopped'); }
   }
-  stop(reason = 'Abgebrochen') {
+  stop(reason = 'Cancelled') {
     if (!this.running) return;
     this.running = false; this.cancel(this.timer);
     try { this.release?.(); }

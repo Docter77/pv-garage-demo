@@ -3,8 +3,8 @@ const targets = [
   ['pv-flow-card', 'PV', '_renderLatest'],
   ['room-status-card', 'Rooms', '_flushRoomRender'],
   ['garage-sun-moon-card', 'Garage'],
-  ['weather-strip-card', 'Wetter'],
-  ['proplanta-sun-strip-card', 'Solar-Wetter']
+  ['weather-strip-card', 'Weather'],
+  ['proplanta-sun-strip-card', 'Solar-Weather']
 ];
 
 function unionLength(intervals) {
@@ -82,10 +82,10 @@ export class GarageUpdateTrace {
   text() {
     const w = this.worst;
     if (!w) return '';
-    const cards = w.cards.slice(0, 3).map(c => `${c.label} ${c.ms.toFixed(0)} ms`).join(', ') || 'keine erfassten Karten-Updates';
+    const cards = w.cards.slice(0, 3).map(c => `${c.label} ${c.ms.toFixed(0)} ms`).join(', ') || 'no recorded card updates';
     const detail = w.details[0];
-    return `\nBlock ${w.duration.toFixed(0)} ms: ${cards}\nNicht zugeordnet: ${Math.max(0, w.duration - w.known).toFixed(0)} ms` +
-      (detail ? `\nDetail darin: ${detail.label} ${detail.ms.toFixed(0)} ms` : '');
+    return `\nBlock ${w.duration.toFixed(0)} ms: ${cards}\nUnattributed: ${Math.max(0, w.duration - w.known).toFixed(0)} ms` +
+      (detail ? `\nIncluding: ${detail.label} ${detail.ms.toFixed(0)} ms` : '');
   }
 
   stop() {

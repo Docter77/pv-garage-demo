@@ -21,8 +21,8 @@ export class SolarYearPreview {
     this.caches = new Map();
     this.locationSelect = document.createElement('select');
     this.locationSelect.className = 'year-location';
-    this.locationSelect.title = 'Standort nur fuer den Jahresverlauf';
-    this.locationSelect.setAttribute('aria-label', 'Standort Jahresverlauf');
+    this.locationSelect.title = 'Location for annual preview only';
+    this.locationSelect.setAttribute('aria-label', 'Annual preview location');
     for (const { id, label } of LOCATIONS) this.locationSelect.add(new Option(label, id));
     this.locationSelect.onchange = () => {
       const restart = this.running || this.loading;
@@ -33,7 +33,7 @@ export class SolarYearPreview {
     view.root.querySelector('.tools').append(this.locationSelect);
     this.status = document.createElement('div');
     this.status.className = 'year-status'; this.status.hidden = true;
-    this.status.title = 'Vorschau von Sonne, Mond und ausgewaehlten Planeten. Werte ausserhalb der Szene bleiben beim gewaehlten Demo-Tag.';
+    this.status.title = 'Preview of the sun, moon and selected planets. Values outside the scene remain on the selected demo day.';
     view.root.append(this.status);
     this.eclipseCalendar = new EclipseCalendar(this);
     this.syncButton();
@@ -56,7 +56,7 @@ export class SolarYearPreview {
   syncButton() {
     this.view.root.querySelector('.tools').classList.toggle('year-running', !!(this.running || this.loading));
     this.button.setAttribute('aria-pressed', String(!!(this.running || this.loading)));
-    this.button.title = this.running || this.loading ? 'Jahreslauf stoppen' : 'Sonne, Mond und ausgewaehlte Planeten: ab heute ein Jahr (30 Sekunden)';
+    this.button.title = this.running || this.loading ? 'Stop annual preview' : 'Sun, moon and selected planets: one year from the selected date (30 seconds)';
     this.button.setAttribute('aria-label', this.button.title);
     this.button.innerHTML = this.running || this.loading
       ? '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg>' : ICON;
@@ -67,20 +67,20 @@ export class SolarYearPreview {
     if (v.disposed || !v.active || v.failed) return;
     v.closeOptions();
     this.status.hidden = false;
-    if (!request) { this.status.textContent = 'Jahreslauf: Standort fehlt'; return; }
+    if (!request) { this.status.textContent = 'Annual preview: location missing'; return; }
     if (!v.expanded) v.openExpanded();
     this.status.hidden = false;
     v.setPlaying(false);
     this.key = JSON.stringify(request);
     this.locationLabel = LOCATIONS.find(location => location.id === this.locationId)?.label || 'Demo';
-    this.timeFormatter = new Intl.DateTimeFormat('de-DE', { timeZone:request.timeZone, hour:'2-digit', minute:'2-digit', hourCycle:'h23' });
+    this.timeFormatter = new Intl.DateTimeFormat('en-GB', { timeZone:request.timeZone, hour:'2-digit', minute:'2-digit', hourCycle:'h23' });
     const cached = this.caches.get(this.key);
     if (cached) {
       this.caches.delete(this.key); this.caches.set(this.key, cached);
       this.cache = cached; this.begin(); return;
     }
     this.loading = true; this.syncButton();
-    this.status.textContent = `${this.locationLabel}: Jahreslauf wird vorbereitet ...`;
+    this.status.textContent = `${this.locationLabel}: Preparing annual preview ...`;
     try {
       const worker = new Worker(new URL('./garage-solar-year-worker-v280.js', import.meta.url), { type:'module' });
       this.worker = worker;
@@ -104,7 +104,7 @@ export class SolarYearPreview {
   fail() {
     this.stop();
     this.status.hidden = false;
-    this.status.textContent = 'Jahreslauf nicht verfuegbar. Erneut starten.';
+    this.status.textContent = 'Annual preview unavailable. Try again.';
   }
 
   createGeometry() {
@@ -181,9 +181,9 @@ export class SolarYearPreview {
       value:row.querySelector('.expanded-time')
     }));
     const panel = v.root.querySelector('.expanded-times');
-    panel.title = `${this.locationLabel}: Ortszeit der Jahresvorschau`;
-    v.root.querySelector('.expanded-metrics').title = 'Werte des gewaehlten Demo-Tags, nicht Jahresvorschau';
-    v.root.querySelector('.expanded-metrics').dataset.liveLocation = 'Demo-Tag';
+    panel.title = `${this.locationLabel}: local time in annual preview`;
+    v.root.querySelector('.expanded-metrics').title = 'Selected demo-day values, not annual preview';
+    v.root.querySelector('.expanded-metrics').dataset.liveLocation = 'Demo day';
     this.syncButton();
     this.drawDay(0);
     this.resume();

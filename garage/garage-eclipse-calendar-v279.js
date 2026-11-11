@@ -1,5 +1,5 @@
-const TYPES = { partial:'Partiell', total:'Total', annular:'Ringfoermig', penumbral:'Halbschatten' };
-const bodyName = event => event.body === 'sun' ? 'Sonnenfinsternis' : 'Mondfinsternis';
+const TYPES = { partial:'Partial', total:'Total', annular:'Annular', penumbral:'Penumbral' };
+const bodyName = event => event.body === 'sun' ? 'Solar eclipse' : 'Lunar eclipse';
 
 export function eclipseTimeline(days, events, duration = 30000) {
   const marked = new Set(events.map(e=>e.day));
@@ -32,10 +32,10 @@ export class EclipseCalendar {
     `;
     root.append(this.style);
     this.panel = document.createElement('section'); this.panel.className = 'eclipse-calendar'; this.panel.hidden = true;
-    this.panel.setAttribute('aria-label', 'Finsternisse im Kalenderflug');
-    this.select = document.createElement('select'); this.select.setAttribute('aria-label', 'Zu einer Finsternis springen');
+    this.panel.setAttribute('aria-label', 'Eclipses in the annual preview');
+    this.select = document.createElement('select'); this.select.setAttribute('aria-label', 'Jump to an eclipse');
     this.canvas = document.createElement('canvas'); this.canvas.width = this.canvas.height = 144;
-    this.canvas.title = 'Geometrie am Maximum; Ausrichtung und Schattenhelligkeit schematisch. Sichtbarkeit ohne Wetter, Gebaeude und Gelaende.';
+    this.canvas.title = 'Geometry at maximum; orientation and shadow brightness are schematic. Visibility excludes weather, buildings and terrain.';
     this.text = document.createElement('div');
     this.title = document.createElement('strong'); this.when = document.createElement('span');
     this.sight = document.createElement('span'); this.note = document.createElement('span'); this.note.className = 'eclipse-note';
@@ -46,7 +46,7 @@ export class EclipseCalendar {
     this.play.onclick = () => preview.togglePlayback();
     this.slider = document.createElement('input'); this.slider.type = 'range';
     this.slider.min = '0'; this.slider.step = '1';
-    this.slider.setAttribute('aria-label', 'Datum im Kalenderflug');
+    this.slider.setAttribute('aria-label', 'Date in annual preview');
     this.slider.addEventListener('pointerdown', () => preview.pausePlayback());
     this.slider.addEventListener('input', () => preview.seekDay(Number(this.slider.value)));
     this.slider.addEventListener('wheel', event => {
@@ -70,10 +70,10 @@ export class EclipseCalendar {
     this.slider.title = `${cache.dates[0]} - ${cache.dates.at(-1)}`;
     this.syncPlayback();
     this.events = cache.eclipses || [];
-    this.format = new Intl.DateTimeFormat('de-DE', { timeZone, day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hourCycle:'h23' });
-    this.select.replaceChildren(new Option(`Finsternisse (${this.events.length})`, '-1'));
+    this.format = new Intl.DateTimeFormat('en-GB', { timeZone, day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hourCycle:'h23' });
+    this.select.replaceChildren(new Option(`Eclipses (${this.events.length})`, '-1'));
     this.events.forEach((event,i)=>this.select.add(new Option(`${event.date.slice(8)}.${event.date.slice(5,7)}. ${bodyName(event)}${event.visible ? ' *' : ''}`, String(i))));
-    this.select.title = '* Am gewaehlten Standort zumindest zeitweise ueber dem Horizont';
+    this.select.title = '* Above the horizon at the selected location for at least part of the event';
     this.select.disabled = !this.events.length;
     this.panel.hidden = !this.preview.view.expanded;
     this.layout.classList.toggle('eclipse-calendar-running', !this.panel.hidden);
@@ -87,19 +87,19 @@ export class EclipseCalendar {
     this.select.value = String(index);
     const ctx = this.canvas.getContext('2d'); ctx.clearRect(0,0,144,144);
     if (!event) {
-      this.title.textContent = 'Finsternisse im Jahreslauf';
-      this.when.textContent = `${this.events.length} Ereignisse · ${this.preview.locationLabel}`;
+      this.title.textContent = 'Eclipses during the year';
+      this.when.textContent = `${this.events.length} events · ${this.preview.locationLabel}`;
       this.sight.textContent = ''; this.note.textContent = '';
-      this.canvas.setAttribute('aria-label', 'Kein Finsternis-Ereignis am angezeigten Tag');
+      this.canvas.setAttribute('aria-label', 'No eclipse on the selected day');
       return;
     }
     this.title.textContent = `${bodyName(event)} · ${TYPES[event.kind] || event.kind}`;
-    this.when.textContent = `${this.format.format(event.peak)} · Maximum (${event.local ? 'lokal' : 'global'})`;
-    this.sight.textContent = event.visible ? (event.peakAltitude > 0 ? 'Hier sichtbar (astronomisch)' : 'Hier teilweise sichtbar; Maximum unter Horizont')
-      : event.body === 'sun' && !event.local ? 'Hier keine sichtbare Bedeckung' : 'Hier unter dem Horizont';
-    this.note.textContent = event.obscuration == null ? `Weltweit: ${TYPES[event.globalKind]}`
-      : event.kind === 'penumbral' ? 'Halbschatten: leichte Abdunklung, kein Kernschatten'
-      : `${event.body === 'sun' ? 'Sonnenflaeche bedeckt' : 'Mondflaeche im Kernschatten'}: ${(event.obscuration*100).toFixed(1)} %`;
+    this.when.textContent = `${this.format.format(event.peak)} · Maximum (${event.local ? 'local' : 'global'})`;
+    this.sight.textContent = event.visible ? (event.peakAltitude > 0 ? 'Visible here (astronomically)' : 'Partly visible here; maximum below the horizon')
+      : event.body === 'sun' && !event.local ? 'No visible eclipse here' : 'Below the horizon here';
+    this.note.textContent = event.obscuration == null ? `Worldwide: ${TYPES[event.globalKind]}`
+      : event.kind === 'penumbral' ? 'Penumbral: slight dimming, no umbral shadow'
+      : `${event.body === 'sun' ? 'Solar surface obscured' : 'Lunar surface in umbra'}: ${(event.obscuration*100).toFixed(1)} %`;
     this.canvas.setAttribute('role','img'); this.canvas.setAttribute('aria-label', `${this.title.textContent}. ${this.note.textContent}`);
     const circle = (x,r,color)=>{ctx.beginPath();ctx.arc(x,72,r,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();};
     const radius=46;
@@ -118,7 +118,7 @@ export class EclipseCalendar {
 
   syncPlayback() {
     const paused = !!this.preview.manualPaused;
-    this.play.title = paused ? 'Kalenderflug fortsetzen' : 'Kalenderflug pausieren';
+    this.play.title = paused ? 'Resume annual preview' : 'Pause annual preview';
     this.play.setAttribute('aria-label', this.play.title);
     this.play.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${paused ? '<path d="m7 4 14 8-14 8z"/>' : '<path d="M6 4h4v16H6zm8 0h4v16h-4z"/>'}</svg>`;
   }

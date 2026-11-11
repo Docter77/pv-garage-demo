@@ -1,8 +1,8 @@
 const PHASES = [
-  { label: 'Alle aktiv', tag: null },
-  { label: 'Room Grafikpause', tag: 'room-status-card' },
-  { label: 'PV Grafikpause', tag: 'pv-flow-card' },
-  { label: 'Wetter Grafikpause', tag: 'weather-strip-card' }
+  { label: 'All active', tag: null },
+  { label: 'Room graphics paused', tag: 'room-status-card' },
+  { label: 'PV graphics paused', tag: 'pv-flow-card' },
+  { label: 'Weather graphics paused', tag: 'weather-strip-card' }
 ];
 let activeTest = null;
 let serial = 0;
@@ -72,7 +72,7 @@ export class GaragePaintTest {
   }
 
   start() {
-    activeTest?.stop('Abgebrochen');
+    activeTest?.stop('Cancelled');
     activeTest = this;
     this.running = true;
     this.advance();
@@ -83,7 +83,7 @@ export class GaragePaintTest {
     try {
       this.release?.(); this.release = null;
       const phase = PHASES[++this.index];
-      if (!phase) { this.stop('Fertig'); return; }
+      if (!phase) { this.stop('Done'); return; }
       const cards = phase.tag ? (this.cards.get(phase.tag) || []).filter(c => c.isConnected) : [];
       if (phase.tag && !cards.length) {
         this.results.push({ label: phase.label, missing: true });
@@ -104,14 +104,14 @@ export class GaragePaintTest {
             try {
               this.results.push({ label: phase.label, cards: cards.length, seconds: (this.now() - this.started) / 1000, ...this.sample() });
               this.advance();
-            } catch (_) { this.stop('Fehler: Test beendet'); }
+            } catch (_) { this.stop('Error: test stopped'); }
           }, 20000);
-        } catch (_) { this.stop('Fehler: Test beendet'); }
+        } catch (_) { this.stop('Error: test stopped'); }
       }, 1000);
-    } catch (_) { this.stop('Fehler: Test beendet'); }
+    } catch (_) { this.stop('Error: test stopped'); }
   }
 
-  stop(reason = 'Abgebrochen') {
+  stop(reason = 'Cancelled') {
     if (!this.running) return;
     this.running = false;
     this.cancel(this.timer);

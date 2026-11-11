@@ -1,4 +1,5 @@
 import * as THREE from './three-r180.module.min.js';
+import { GarageWeather } from './garage-weather-v2.js';
 import { holdGarageBackground } from '../garage-render-pause.js?v=1';
 import { OrbitControls } from './OrbitControls-r180.js';
 import { Line2 } from './Line2-r180.js';
@@ -21,7 +22,7 @@ const SKY_MARKER_MIN_PIXELS = 20;
 const MOON_MARKER_SCALE = 0.8;
 // Private neighborhood geometry is deliberately absent from this demo fork.
 const ESTIMATED_NEIGHBORS = [];
-const PLANETS = [['mercury', 'Me', 'Merkur'], ['venus', 'Ve', 'Venus'], ['mars', 'Ma', 'Mars'], ['jupiter', 'Ju', 'Jupiter']];
+const PLANETS = [['mercury', 'Me', 'Mercury'], ['venus', 'Ve', 'Venus'], ['mars', 'Ma', 'Mars'], ['jupiter', 'Ju', 'Jupiter']];
 
 // East = +X, up = +Y, north = -Z. Azimuth is clockwise from north.
 export function skyVector(azimuth, elevation, radius = RADIUS) {
@@ -124,15 +125,15 @@ export class GarageOrbit3D {
       .frame-metrics{position:absolute;left:8px;bottom:8px;box-sizing:border-box;max-width:calc(100% - 16px);max-height:calc(100% - 16px);overflow:auto;overscroll-behavior:contain;padding:6px 8px;border:1px solid #53616c;border-radius:4px;background:rgba(16,24,32,.94);color:#e7edf0;font:11px/1.4 monospace;white-space:pre-wrap;pointer-events:auto;z-index:2}
       .error{position:absolute;inset:0;display:grid;place-content:center;color:#fff;background:#101820;font:12px Arial;text-align:center;padding:20px}
       [hidden]{display:none!important}
-    </style><div class="tools"><button class="reset-view" title="Ansicht zuruecksetzen" aria-label="Ansicht zuruecksetzen">&#8634;</button><button class="planet-toggle" title="Planetenbahnen einblenden" aria-label="Planetenbahnen einblenden" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="5"/><ellipse cx="12" cy="12" rx="11" ry="3" transform="rotate(-30 12 12)"/></svg></button><button class="expand-view" title="Grosse Ansicht oeffnen" aria-label="Grosse Ansicht oeffnen"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 3H3v6M15 3h6v6M3 15v6h6M21 15v6h-6"/></svg></button></div>
+    </style><div class="tools"><button class="reset-view" title="Reset view" aria-label="Reset view">&#8634;</button><button class="planet-toggle" title="Show planet paths" aria-label="Show planet paths" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="5"/><ellipse cx="12" cy="12" rx="11" ry="3" transform="rotate(-30 12 12)"/></svg></button><button class="expand-view" title="Open expanded view" aria-label="Open expanded view"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 3H3v6M15 3h6v6M3 15v6h6M21 15v6h-6"/></svg></button></div>
     <svg class="shadow-marker" hidden role="img"><title></title><line stroke="#101820" stroke-width="6" stroke-linecap="round"/><line class="shadow-color" stroke-width="4" stroke-linecap="round"/></svg>
     <div class="error" hidden></div>
-    <dialog class="expanded-dialog" aria-labelledby="garage-expanded-title"><div class="expanded-layout"><header class="expanded-header"><h2 id="garage-expanded-title">Garage</h2><button class="close-expanded" aria-label="Grosse Ansicht schliessen" title="Schliessen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header><div class="expanded-body"><div class="expanded-scene"></div><ul class="expanded-times"></ul></div><div class="expanded-metrics"></div></div></dialog>`;
+    <dialog class="expanded-dialog" aria-labelledby="garage-expanded-title"><div class="expanded-layout"><header class="expanded-header"><h2 id="garage-expanded-title">Garage</h2><button class="close-expanded" aria-label="Close expanded view" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header><div class="expanded-body"><div class="expanded-scene"></div><ul class="expanded-times"></ul></div><div class="expanded-metrics"></div></div></dialog>`;
     this.active = true;
     this.optionsDialog = document.createElement('dialog');
     this.optionsDialog.className = 'options-dialog';
-    this.optionsDialog.setAttribute('aria-label', '3D Optionen');
-    this.optionsDialog.innerHTML = '<div class="options-header"><span>3D Optionen</span><button class="close-options" title="Schliessen" aria-label="Optionen schliessen">&#215;</button></div><div class="options-body"></div>';
+    this.optionsDialog.setAttribute('aria-label', '3D options');
+    this.optionsDialog.innerHTML = '<div class="options-header"><span>3D options</span><button class="close-options" title="Close" aria-label="Close options">&#215;</button></div><div class="options-body"></div>';
     this.root.append(this.optionsDialog);
     this.optionsDialog.querySelector('.close-options').onclick = () => this.closeOptions();
     this.optionsDialog.addEventListener('cancel', event => { event.preventDefault(); this.closeOptions(); });
@@ -150,16 +151,16 @@ export class GarageOrbit3D {
     const tools = this.root.querySelector('.tools'), expand = this.root.querySelector('.expand-view');
     const options = document.createElement('button');
     options.className = 'options-view';
-    options.title = 'Flugmodus, Haeuser, Planeten und Messung';
-    options.setAttribute('aria-label', '3D Optionen');
+    options.title = 'Camera, buildings, planets and performance';
+    options.setAttribute('aria-label', '3D options');
     options.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18M8 3v6M16 9v6M10 15v6"/></svg>';
     options.onclick = () => this.openOptions();
     tools.append(options);
     const houseMode = document.createElement('select');
     houseMode.className = 'house-mode';
-    houseMode.title = 'Nachbarhaeuser: Auto zeigt Schattenwerfer nahe Sonne oder Mond, mit 5 Minuten Vor-/Nachlauf (geschaetzte Geometrie)';
-    houseMode.setAttribute('aria-label', 'Nachbarhaeuser');
-    houseMode.innerHTML = '<option value="auto">Haus Auto</option><option value="all">Haus Alle</option><option value="off">Haus Aus</option>';
+    houseMode.title = 'Nearby buildings: Auto shows possible obstructions near the sun or moon, with a five-minute margin (estimated geometry)';
+    houseMode.setAttribute('aria-label', 'Nearby buildings');
+    houseMode.innerHTML = '<option value="auto">Buildings: Auto</option><option value="all">Buildings: All</option><option value="off">Buildings: Off</option>';
     let savedHouseMode;
     try { savedHouseMode = localStorage.getItem('pvGarageDemoRich.houseMode'); } catch (_) {}
     this.houseMode = ['auto', 'all', 'off'].includes(savedHouseMode) ? savedHouseMode : 'auto';
@@ -178,9 +179,9 @@ export class GarageOrbit3D {
     this.setPlaying(false);
     const flightMode = document.createElement('select');
     flightMode.className = 'flight-mode';
-    flightMode.title = 'Flugmodus: Einfach = Garage im Mittelpunkt; Sonne = bisherige Kamerafahrt';
+    flightMode.title = 'Camera mode: Simple orbits the garage; Sun follows the solar view';
     flightMode.setAttribute('aria-label', flightMode.title);
-    flightMode.innerHTML = '<option value="simple">Einfach</option><option value="sun">Sonne</option>';
+    flightMode.innerHTML = '<option value="simple">Simple</option><option value="sun">Sun</option>';
     flightMode.onchange = () => this.setFlightMode(flightMode.value);
     tools.insertBefore(flightMode, playButton.nextSibling);
     let savedFlightMode;
@@ -188,7 +189,7 @@ export class GarageOrbit3D {
     this.setFlightMode(savedFlightMode, false);
     const measureButton = document.createElement('button');
     measureButton.className = 'measure-view';
-    measureButton.title = 'Bildtakt messen (erneut einschalten startet neu)';
+    measureButton.title = 'Measure frame timing (toggle again to restart)';
     measureButton.setAttribute('aria-label', measureButton.title);
     measureButton.setAttribute('aria-pressed', 'false');
     measureButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 3v18h18M7 16v-5m5 5V7m5 9V4"/></svg>';
@@ -201,7 +202,7 @@ export class GarageOrbit3D {
     for (const [id, short, name] of PLANETS) {
       const button = document.createElement('button');
       button.className = 'planet-choice'; button.dataset.planet = id; button.textContent = short;
-      button.title = `${name}: Bahn ein-/ausblenden`; button.setAttribute('aria-label', button.title);
+      button.title = `${name}: Show or hide orbit`; button.setAttribute('aria-label', button.title);
       button.onclick = () => {
         this.selectedPlanets[id] = !this.planetPathsEnabled || !this.selectedPlanets[id];
         this.planetPathsEnabled = true;
@@ -238,7 +239,7 @@ export class GarageOrbit3D {
       this.renderer.setPixelRatio(this.renderPixelRatio);
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       this.renderer.setClearColor(0x101820);
-      this.renderer.domElement.setAttribute('aria-label', 'Drehbare Garage mit Sonnenbahn und Mondbahn');
+      this.renderer.domElement.setAttribute('aria-label', 'Rotatable garage with sun and moon paths');
       this.renderer.domElement.tabIndex = 0;
       this.root.prepend(this.renderer.domElement);
       this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -281,13 +282,14 @@ export class GarageOrbit3D {
         event.preventDefault();
         this.annualPreview?.stop(false);
         this.setPlaying(false);
-        this.showError('3D-Grafik unterbrochen. Bitte auf 2D und wieder auf 3D wechseln.');
+        this.showError('3D rendering interrupted. Please reload the demo.');
       };
       this.renderer.domElement.addEventListener('webglcontextlost', this.onLost);
       this.scene.add(new THREE.HemisphereLight(0xe5f3ff, 0x68716f, 2.5));
       const key = new THREE.DirectionalLight(0xffffff, 2);
       key.position.set(8, 16, 12);
       this.scene.add(key);
+      this.weather = new GarageWeather(this.scene, key);
       this.building = new THREE.Group();
       this.neighborhood = new THREE.Group();
       this.horizon = new THREE.Group();
@@ -309,7 +311,7 @@ export class GarageOrbit3D {
         if (document.visibilityState === 'hidden') {
           clearTimeout(this.renderRetry); this.renderRetry = 0;
           this.annualPreview?.suspend();
-          this.paintTest?.stop('Abgebrochen: Ansicht verborgen');
+          this.paintTest?.stop('Cancelled: Ansicht verborgen');
           cancelAnimationFrame(this.frame); this.frame = 0;
         } else { this.annualPreview?.resume(); this.requestRender(); }
       };
@@ -329,7 +331,7 @@ export class GarageOrbit3D {
 
   setPlaying(playing, persist = false) {
     if (playing) this.annualPreview?.stop();
-    if (!playing) this.paintTest?.stop('Abgebrochen: Flug pausiert');
+    if (!playing) this.paintTest?.stop('Cancelled: camera paused');
     this.playing = !!playing && !this.disposed && !!this.origin && !this.failed;
     if (!this.playing) { clearTimeout(this.renderRetry); this.renderRetry = 0; }
     if (persist) {
@@ -341,7 +343,7 @@ export class GarageOrbit3D {
     if (this.syncPixelRatio()) this.requestRender();
     const button = this.root.querySelector('.play-view');
     button.setAttribute('aria-pressed', String(this.playing));
-    button.title = this.playing ? 'Kamerafahrt pausieren' : 'Langsame Kamerafahrt starten';
+    button.title = this.playing ? 'Pause camera flight' : 'Start slow camera flight';
     button.setAttribute('aria-label', button.title);
     button.innerHTML = this.playing
       ? '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>'
@@ -464,6 +466,7 @@ export class GarageOrbit3D {
         }
         const zooming = this.advanceZoom(timestamp);
         if (this.playing) this.frameFlight(seconds);
+        this.weather?.frame(this.data?.weather, !!this.data?.weather && !this.annualPreview?.running, seconds, this.data?.sun?.elevation > 0);
         this.renderer.render(this.scene, this.camera);
         this.updateShadowMarker();
         if (measureStart != null) {
@@ -527,7 +530,7 @@ export class GarageOrbit3D {
     if (persist) {
       try { localStorage.setItem('pvGarageDemoRich.measurement', String(!!enabled)); } catch (_) {}
     }
-    this.paintTest?.stop('Abgebrochen: Messung umgeschaltet');
+    this.paintTest?.stop('Cancelled: measurement toggled');
     this.paintTestReport = null;
     this.metricsObserver?.disconnect();
     this.metricsObserver = null;
@@ -540,7 +543,7 @@ export class GarageOrbit3D {
     if (!this.frameMetrics) return;
     this.updateTrace = new GarageUpdateTrace(() => !!this.playing && this.active && document.visibilityState !== 'hidden');
     this.updateTrace.wrap(GarageOrbit3D.prototype, 'update', '3D Update');
-    this.updateTrace.wrap(GarageOrbit3D.prototype, 'makeCurrent', '3D Sonne/Mond', false, true);
+    this.updateTrace.wrap(GarageOrbit3D.prototype, 'makeCurrent', '3D Sun/Moon', false, true);
     this.metricsHasLongTasks = false;
     try {
       if (typeof PerformanceObserver !== 'undefined' && PerformanceObserver.supportedEntryTypes?.includes('longtask')) {
@@ -563,24 +566,24 @@ export class GarageOrbit3D {
     if (!this.frameMetrics || !this.metricsPanel) return;
     const s = this.frameMetrics.summary();
     const phase = this.paintTest?.running ? `${this.paintTest.phase.label}: ${Math.max(0, Math.ceil((this.paintTest.deadline - performance.now()) / 1000))} s\n` : '';
-    this.metricsPanel.textContent = `${phase}FPS ${s.fps.toFixed(1)} | Abstand P95 ${s.p95.toFixed(0)} ms\nMax ${s.maxGap.toFixed(0)} ms | >50 ms: ${s.slow}\nJS ${s.jsMean.toFixed(1)} / ${s.jsMax.toFixed(1)} ms (ohne GPU)\nBrowser >50 ms: ${this.metricsHasLongTasks ? `${s.longTasks} / Max ${s.longTaskMax.toFixed(0)} ms` : 'nicht verfuegbar'}`;
+    this.metricsPanel.textContent = `${phase}FPS ${s.fps.toFixed(1)} | Interval P95 ${s.p95.toFixed(0)} ms\nMax ${s.maxGap.toFixed(0)} ms | >50 ms: ${s.slow}\nJS ${s.jsMean.toFixed(1)} / ${s.jsMax.toFixed(1)} ms (excluding GPU)\nBrowser >50 ms: ${this.metricsHasLongTasks ? `${s.longTasks} / Max ${s.longTaskMax.toFixed(0)} ms` : 'unavailable'}`;
     this.metricsPanel.textContent += this.updateTrace?.text() || '';
   }
 
   startPaintTest() {
     try {
-      this.paintTestReport = 'Ebenenvergleich startet - alles bleibt aktiv ...';
+      this.paintTestReport = 'Starting layer comparison - everything stays active ...';
       this.metricsPanel.hidden = false;
       this.refreshMeasurement();
       this.beginPaintTest();
     } catch (error) {
-      try { this.paintTest?.stop('Startfehler'); } catch (_) {}
+      try { this.paintTest?.stop('Startup error'); } catch (_) {}
       this.metricsObserver?.disconnect(); this.metricsObserver = null;
       this.frameMetrics = null;
       const button = this.root.querySelector('.paint-test-view');
       button?.setAttribute('aria-pressed', 'false');
       if (button) button.textContent = 'A/B';
-      this.paintTestReport = `A/B konnte nicht starten\n${String(error?.message || error).slice(0, 160)}\nRoom-Ebene aktiv`;
+      this.paintTestReport = `A/B could not start\n${String(error?.message || error).slice(0, 160)}\nRoom layer active`;
       this.metricsPanel.hidden = false;
       this.refreshMeasurement();
       console.warn('Garage A/B start failed', error);
@@ -603,10 +606,10 @@ export class GarageOrbit3D {
   }
 
   beginPaintTest() {
-    if (this.disposed || !this.active || document.visibilityState === 'hidden') throw new Error('Garage-Ansicht ist nicht aktiv');
-    if (this.expanded) throw new Error('A/B bitte in der kleinen Solar-2-Ansicht starten');
+    if (this.disposed || !this.active || document.visibilityState === 'hidden') throw new Error('Garage view is not active');
+    if (this.expanded) throw new Error('Start A/B in the compact view');
     if (!this.playing) this.setPlaying(true);
-    if (!this.playing) throw new Error('Kamerafahrt konnte nicht gestartet werden');
+    if (!this.playing) throw new Error('Camera flight could not start');
     this.setMeasurement(true);
     const flight = Object.fromEntries(['flyElapsed', 'flyAzimuth', 'flyStartElevation', 'flyElevation', 'flyPitchOffset', 'flyRadius'].map(key => [key, this[key]]));
     const button = this.root.querySelector('.paint-test-view');
@@ -627,9 +630,9 @@ export class GarageOrbit3D {
         if (button) button.textContent = 'A/B';
         this.metricsObserver?.disconnect(); this.metricsObserver = null;
         this.frameMetrics = null;
-        const lines = rows.map(r => r.missing ? `${r.label}: nicht gefunden` : !r.frames ? `${r.label}: keine Bilder` :
+        const lines = rows.map(r => r.missing ? `${r.label}: not found` : !r.frames ? `${r.label}: no frames` :
           `${r.label}: ${r.fps.toFixed(1)} FPS | P95 ${r.p95.toFixed(0)} ms | B ${r.longTasksSupported ? r.longTasks : '-'}`);
-        this.paintTestReport = `${reason} - Room-Ebene wieder aktiv\n${lines.join('\n')}\nAlles durchgehend aktiv. B: Blockaden >50 ms`;
+        this.paintTestReport = `${reason} - Room layer restored\n${lines.join('\n')}\nEverything active throughout. B: blocks >50 ms`;
         this.metricsPanel.hidden = false;
         this.root.querySelector('.measure-view')?.setAttribute('aria-pressed', 'false');
         this.refreshMeasurement();
@@ -1018,7 +1021,7 @@ export class GarageOrbit3D {
     for (let angle = 0; angle < 360; angle += 45) {
       this.line([this.origin, skyVector(angle, 0, this.skyRadius).add(this.origin)], 0xaebbc2, true, this.horizon, 0.25);
     }
-    for (const [a, name, color] of [[0, 'N', '#ff4355'], [90, 'O', '#55ec69'], [180, 'S', '#439cff'], [270, 'W', '#ffff00']]) {
+    for (const [a, name, color] of [[0, 'N', '#ff4355'], [90, 'E', '#55ec69'], [180, 'S', '#439cff'], [270, 'W', '#ffff00']]) {
       const label = this.label(name, color, 1.25);
       label.userData.skyAzimuth = a;
       label.position.copy(skyVector(a, 0, this.skyRadius + 1).add(this.origin));
@@ -1045,7 +1048,7 @@ export class GarageOrbit3D {
       shape.lineTo(width / 2, wall); shape.lineTo(0, ridge); shape.lineTo(-width / 2, wall); shape.closePath();
       const geometry = new THREE.ExtrudeGeometry(shape, { depth: length, bevelEnabled: false, steps: 1 });
       geometry.translate(0, 0, -length / 2);
-      const name = String(house.name || 'Haus').slice(0, 40);
+      const name = String(house.name || 'Home').slice(0, 40);
       const direction = name.trim().toLowerCase().replace(/\u00fc/g, 'ue');
       const tint = { ost:0xb0b5b8, sued:0x8ad29a, suedwest:0xe5a6b8, west:0x8ad29a, nord:0xe6d986 }[direction] ?? null;
       const material = new THREE.MeshBasicMaterial({ color: tint ?? 0xa8c7d3, transparent: true, opacity: 0.10,
@@ -1494,7 +1497,7 @@ export class GarageOrbit3D {
     dom.coordinates = coordinates;
     const color = state.color || (state.level >= 1 ? '#ff4355' : '#ffff00');
     if (dom.stroke !== color) { dom.color.setAttribute('stroke', color); dom.stroke = color; }
-    const title = state.level >= 1 ? 'Vollschatten (Objektmodell)' : 'Halbschatten (Objektmodell)';
+    const title = state.level >= 1 ? 'Full shadow (object model)' : 'Partial shadow (object model)';
     if (dom.label !== title) {
       dom.title.textContent = title;
       dom.marker.setAttribute('aria-label', title);
@@ -1558,7 +1561,7 @@ export class GarageOrbit3D {
     }
     const horizonButton = this.root.querySelector('.horizon-toggle');
     horizonButton.setAttribute('aria-pressed', String(this.showPlanetsBelow));
-    horizonButton.title = this.showPlanetsBelow ? 'Ober- und unterhalb: auf nur oberhalb umschalten' : 'Nur oberhalb: auf ober- und unterhalb umschalten';
+    horizonButton.title = this.showPlanetsBelow ? 'Above and below: switch to above horizon only' : 'Above only: show above and below horizon';
     horizonButton.setAttribute('aria-label', horizonButton.title);
     horizonButton.querySelector('.below-arrow').style.display = this.showPlanetsBelow ? '' : 'none';
     const sunElevation = this.data?.sun?.elevation;
@@ -1566,7 +1569,7 @@ export class GarageOrbit3D {
     this.planetPaths.visible = this.planetCurrent.visible = enabled && darkEnough;
     const button = this.root.querySelector('.planet-toggle');
     button.setAttribute('aria-pressed', String(enabled));
-    const title = enabled ? 'Planetenbahnen ausblenden' : 'Planetenbahnen einblenden';
+    const title = enabled ? 'Hide planet paths' : 'Show planet paths';
     button.title = title;
     button.setAttribute('aria-label', title);
     const data = this.planetData;
@@ -1645,6 +1648,7 @@ export class GarageOrbit3D {
     if (geometryChanged) {
       this.geometryKey = geometryKey;
       this.makeBuilding(data.model);
+      this.weather?.place(data.model);
       this.cameraReady = false;
     }
     const housesChanged = this.refreshNeighborhood();
@@ -1697,6 +1701,7 @@ export class GarageOrbit3D {
     if (this.expandedDialog?.open) this.expandedDialog.close();
     cancelAnimationFrame(this.frame);
     this.resizeObserver?.disconnect();
+    this.weather?.dispose();
     document.removeEventListener('visibilitychange', this.visibility);
     this.controls?.dispose();
     if (this.renderer) {
