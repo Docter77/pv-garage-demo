@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'">
-<title>PV Flow + Garage Sonne Mond | Lokale Vorschau</title>
+<title>PV Flow + Garage Sun & Moon | Interactive Demo</title>
 <link rel="stylesheet" href="style.css">
-<header><div><h1>PV Flow <span>+ Garage Sonne Mond</span></h1><p>PV-Tageslauf &middot; Zeitraffer <output id="demo-clock" style="color:#55e4ce;font-variant-numeric:tabular-nums;white-space:nowrap">Tag 1 &middot; 06:00</output></p></div><div style="display:flex;gap:12px;flex-wrap:wrap"><label>Wetter <select id="scenario"><option value="sun">Sonnig</option><option value="cloud">Wechselhaft</option><option value="overcast">Bedeckt</option></select></label><label><input id="animate" type="checkbox" checked>Tageslauf</label></div></header>
-<main><section><h2>PV Flow</h2><pv-flow-lite-card></pv-flow-lite-card></section><section><h2>Garage Sonne Mond</h2><garage-sun-moon-demo></garage-sun-moon-demo></section></main>
-<footer>Beispielwerte und Demo-Standort. Originale Haus- und Batterie-Grafik. Keine Verbindung zu den echten Steuerungen.</footer>
+<header><div><h1>PV Flow <span>+ Garage Sun &amp; Moon</span></h1><p>PV daily cycle &middot; Time lapse <output id="demo-clock" style="color:#55e4ce;font-variant-numeric:tabular-nums;white-space:nowrap">Day 1 &middot; 06:00</output></p><output id="weather-now"></output></div><div style="display:flex;gap:12px;flex-wrap:wrap"><label>Weather <select id="scenario"><option value="auto">Automatic cycle</option><option value="sun">Sunny</option><option value="cloud">Cloudy</option><option value="rain">Rain</option><option value="wind">Windy</option><option value="overcast">Overcast</option></select></label><label><input id="animate" type="checkbox" checked>Daily cycle</label></div></header>
+<main><section><h2>PV Flow</h2><pv-flow-lite-card></pv-flow-lite-card></section><section><h2>Garage Sun & Moon</h2><garage-sun-moon-demo></garage-sun-moon-demo></section></main>
+<footer>Synthetic data and example location. Owner-created house and battery artwork. No connection to real devices.</footer>
 <script type="module" src="demo-day-main-v1.js"></script>
 </html>
