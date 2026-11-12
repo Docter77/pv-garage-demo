@@ -14,8 +14,6 @@ export class GarageAtmosphere {
     this.lamps.name = 'garage-night-lamps';
     this.lamps.visible = false;
     scene.add(this.lamps);
-    this.housings = new THREE.InstancedMesh(new THREE.BoxGeometry(.42,.18,.16),new THREE.MeshLambertMaterial({color:0x333b40}),2);
-    this.lenses = new THREE.InstancedMesh(new THREE.BoxGeometry(.32,.075,.025),new THREE.MeshBasicMaterial({color:0xffdda0}),2);
     this.washes = new THREE.InstancedMesh(new THREE.PlaneGeometry(2.4,2.3),new THREE.ShaderMaterial({
       transparent:true,depthWrite:false,side:THREE.DoubleSide,forceSinglePass:true,
       uniforms:{amount:{value:0}},
@@ -26,7 +24,7 @@ export class GarageAtmosphere {
         float fade=smoothstep(0.0,.08,down)*(1.0-smoothstep(.25,1.0,down));
         gl_FragColor=vec4(1.0,.68,.29,beam*fade*.58*amount);}`
     }),2);
-    this.lamps.add(this.housings,this.lenses,this.washes);
+    this.lamps.add(this.washes);
     const positions=[],centers=[],uv=[],indices=[];
     for(let i=0;i<3;i++){
       const center=[[-3,1.5,-5],[4,2.1,1],[-1,1.2,6]][i];
@@ -59,14 +57,15 @@ export class GarageAtmosphere {
   place(model) {
     this.lamps.rotation.y=(90-model.roofAzimuth)*Math.PI/180;
     const y=Math.min(model.wallHeight-.18,model.wallHeight*.88);
-    const poses=[{x:0,z:-model.length/2-.13,angle:Math.PI},{x:model.width/2+.13,z:0,angle:Math.PI/2}];
+    const doorX=model.width*.32,doorWidth=Math.min(.95,model.width*.18);
+    const poses=[{x:0,z:-model.length/2-.13,angle:Math.PI},
+      {x:doorX-doorWidth/2-.45,z:model.length/2+.13,angle:0}];
     const object=new THREE.Object3D();
     poses.forEach((p,i)=>{
-      object.position.set(p.x,y,p.z);object.rotation.set(0,p.angle,0);object.updateMatrix();this.housings.setMatrixAt(i,object.matrix);
-      object.translateZ(.096);object.updateMatrix();this.lenses.setMatrixAt(i,object.matrix);
+      object.rotation.set(0,p.angle,0);
       object.position.set(p.x,y-1.05,p.z);object.updateMatrix();this.washes.setMatrixAt(i,object.matrix);
     });
-    for(const mesh of [this.housings,this.lenses,this.washes]){mesh.instanceMatrix.needsUpdate=true;mesh.computeBoundingSphere();}
+    this.washes.instanceMatrix.needsUpdate=true;this.washes.computeBoundingSphere();
   }
 
   frame(data, live, seconds, elevation, key) {
@@ -79,7 +78,6 @@ export class GarageAtmosphere {
     if(active){key.intensity*=.06+.94*day;key.color.lerp(this.twilight,dusk*.8);}
     const lamp=active?1-THREE.MathUtils.smoothstep(elevation,-4,2):0;
     this.lamps.visible=lamp>.005;
-    this.lenses.material.color.setRGB(1,.78,.43).multiplyScalar(.4+.6*lamp);
     this.washes.material.uniforms.amount.value=lamp;
     this.mist.visible=!!(live&&data?.fog===true);
     this.mist.material.uniforms.brightness.value=.38+.62*day;
@@ -88,6 +86,6 @@ export class GarageAtmosphere {
   dispose() {
     this.ambient.intensity=this.baseIntensity;this.ambient.color.copy(this.baseSky);this.ambient.groundColor.copy(this.baseGround);
     this.lamps.removeFromParent();this.mist.removeFromParent();
-    for(const mesh of [this.housings,this.lenses,this.washes,this.mist]){mesh.dispose?.();mesh.geometry.dispose();mesh.material.dispose();}
+    for(const mesh of [this.washes,this.mist]){mesh.dispose?.();mesh.geometry.dispose();mesh.material.dispose();}
   }
 }

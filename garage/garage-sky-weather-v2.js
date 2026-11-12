@@ -4,18 +4,18 @@ export function garageSky(condition) {
   const storm=condition==='lightning'||condition==='lightning-rainy';
   const snow=condition==='snowy'||condition==='snowy-rainy';
   const clouds=storm?1.5:condition==='pouring'?1.5:condition==='rainy'?1.35:
-    condition==='cloudy'?.8:condition==='partlycloudy'?.45:
-    ['snowy','snowy-rainy','hail','windy-variant'].includes(condition)?.8:0;
-  return {storm,snow,clouds,mixed:condition==='snowy-rainy'};
+    condition==='cloudy'?1.2:condition==='partlycloudy'?.45:
+    ['snowy','snowy-rainy','hail'].includes(condition)?1.35:condition==='windy-variant'?.8:0;
+  return {storm,snow,clouds,cloudCount:clouds>=1.2?6:3,mixed:condition==='snowy-rainy'};
 }
 
 export class GarageSkyWeather {
   constructor(scene) {
     this.scene=scene;this.elapsed=0;this.stormClock=0;
     const positions=[],centers=[],uv=[],indices=[];
-    for(let i=0;i<3;i++){
+    for(let i=0;i<6;i++){
       positions.push(-6,-1.7,0,6,-1.7,0,6,1.7,0,-6,1.7,0);
-      const center=[[-6,0,-4],[3,1,-6],[6,-.3,3]][i];
+      const center=[[-6,0,-4],[3,1,-6],[6,-.3,3],[-6,.6,5],[0,1.8,1],[7,1.3,-3]][i];
       for(let j=0;j<4;j++)centers.push(...center);
       uv.push(0,0,1,0,1,1,0,1);const n=i*4;indices.push(n,n+1,n+2,n,n+2,n+3);
     }
@@ -34,12 +34,12 @@ export class GarageSkyWeather {
         puff=max(puff,exp(-dot((p-vec2(.73,.46))*vec2(6.,4.4),(p-vec2(.73,.46))*vec2(6.,4.4))));
         float texture=.9+.1*sin(p.x*23.+sin(p.y*19.))*sin(p.y*16.);
         float a=smoothstep(.12,.6,puff)*texture*coverage*.62;
-        vec3 shade=mix(vec3(.43,.48,.52),vec3(.88,.9,.91),p.y)*brightness*(1.-storm*.3);
+        vec3 shade=mix(vec3(.43,.48,.52),vec3(.88,.9,.91),p.y)*brightness*(1.-storm*.65);
         gl_FragColor=vec4(shade,a);}`
     }));
     this.clouds.frustumCulled=false;this.clouds.name='garage-cloud-layer';this.clouds.visible=false;scene.add(this.clouds);
-    const flakes=new Float32Array(32*3);
-    for(let i=0;i<32;i++)flakes.set([((i*.61803398875)%1-.5)*24,(i*.41421356237%1)*16,((i*.73205080757)%1-.5)*24],i*3);
+    const flakes=new Float32Array(96*3);
+    for(let i=0;i<96;i++)flakes.set([((i*.61803398875)%1-.5)*24,(i*.41421356237%1)*16,((i*.73205080757)%1-.5)*24],i*3);
     const snowGeometry=new THREE.BufferGeometry();snowGeometry.setAttribute('position',new THREE.BufferAttribute(flakes,3));
     this.snow=new THREE.Points(snowGeometry,new THREE.ShaderMaterial({transparent:true,depthWrite:false,
       uniforms:{time:{value:0}},
@@ -62,18 +62,19 @@ export class GarageSkyWeather {
     const state=garageSky(data?.condition);
     const sun=Number.isFinite(data?.sun)?data.sun:null;
     this.clouds.visible=!!(live&&state.clouds);
+    this.clouds.geometry.setDrawRange(0,state.cloudCount*6);
     this.clouds.material.uniforms.coverage.value=state.clouds*(1-(sun??0)*.6);
     this.clouds.material.uniforms.brightness.value=THREE.MathUtils.lerp(.32,1,Number.isFinite(elevation)?THREE.MathUtils.smoothstep(elevation,-6,6):1);
     this.clouds.material.uniforms.storm.value=state.storm?1:0;
     // Measured local sunlight wins over the reported weather condition.
     if(live&&sun===null)key.intensity*=1-state.clouds*.4;
     if(live)this.elapsed+=seconds;
-    this.snow.visible=!!(live&&state.snow);this.snow.geometry.setDrawRange(0,state.mixed?16:32);
+    this.snow.visible=!!(live&&state.snow);this.snow.geometry.setDrawRange(0,state.mixed?48:96);
     this.snow.material.uniforms.time.value=this.elapsed;
     const enabled=live&&state.storm&&lightning&&seconds>0;
     this.stormClock=enabled?this.stormClock+Math.min(seconds,.1):0;
-    // One gentle pulse, first after 12s then every 37s; never catch up missed flashes.
-    const phase=(this.stormClock+25)%37;
+    // Single gentle pulses, first after 4s then every 12s; no rapid strobe or catchup.
+    const phase=(this.stormClock+8)%12;
     const flash=enabled&&phase<.45?Math.sin(phase/.45*Math.PI):0;
     this.bolt.visible=flash>.01;this.bolt.material.opacity=.55*flash;
     if(flash)key.intensity+=flash*.45;

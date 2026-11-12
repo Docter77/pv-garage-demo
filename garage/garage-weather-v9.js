@@ -1,6 +1,6 @@
 import * as THREE from './three-r180.module.min.js';
-import { GarageAtmosphere } from './garage-atmosphere-v2.js';
-import { GarageSkyWeather, garageSky } from './garage-sky-weather-v2.js';
+import { GarageAtmosphere } from './garage-atmosphere-v2.js?v=20261112b';
+import { GarageSkyWeather, garageSky } from './garage-sky-weather-v2.js?v=20261112b';
 
 export class GarageWeather {
   constructor(scene, light, ambient) {
@@ -14,9 +14,9 @@ export class GarageWeather {
     this.baseColor = light.color.clone();
     this.atmosphere = new GarageAtmosphere(scene,ambient);
     this.sky = new GarageSkyWeather(scene);
-    const positions = new Float32Array(24 * 2 * 3);
-    const ends = new Float32Array(24 * 2);
-    for (let i = 0; i < 24; i++) {
+    const positions = new Float32Array(72 * 2 * 3);
+    const ends = new Float32Array(72 * 2);
+    for (let i = 0; i < 72; i++) {
       const x = ((i * .61803398875) % 1 - .5) * 30;
       const y = (i * .41421356237 % 1) * 20;
       const z = ((i * .73205080757) % 1 - .5) * 30;
@@ -124,9 +124,12 @@ export class GarageWeather {
     this.rain.visible = !!(live && data?.rain && (!sky.snow || sky.mixed));
     this.fog.density = live && data?.fog === true ? .025 : 0;
     const level = [1,2,3].includes(data?.rainLevel) ? data.rainLevel : 1;
-    if (level !== this.rainLevel) {
+    const dense = level === 3 || data?.condition === 'pouring' || sky.storm;
+    const rainCount = [0,16,32,48][level] * (dense ? 3 : 1);
+    if (rainCount !== this.rainCount) {
+      this.rainCount = rainCount;
       this.rainLevel = level;
-      this.rain.geometry.setDrawRange(0, [0,16,32,48][level]);
+      this.rain.geometry.setDrawRange(0, rainCount);
       this.rain.material.uniforms.opacity.value = [0,.36,.48,.62][level];
       this.rain.userData.level = level;
     }
