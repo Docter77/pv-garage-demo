@@ -24,9 +24,18 @@ automatically; their controls can pause them independently.
 - Weather changes preserve time and charge levels. At midnight, daily energy
   totals move to **Y** (yesterday); **STAT** opens the energy statistics.
 - An interactive 3D garage with camera flight, expanded view and planet controls.
-- Automatic weather changes every 20 seconds: sunshine, clouds, rain and wind.
-  Select a weather condition manually to keep it. Rain and sunlight animate
-  during camera flight; a static rooftop flag shows wind strength and direction.
+- Automatic weather changes every 20 seconds: sunshine, clouds, rain, heavy rain,
+  snow, sleet, thunderstorms, fog, dusk, night and wind. Select any condition
+  manually to keep it. Rain has three intensities; rainy skies are denser than
+  cloudy skies. Snow falls gently, while fog wisps stay static.
+- A red-and-white 3D windsock shows four wind strengths and downwind direction,
+  without flutter. Night darkens the garage and lights two virtual wall lamps;
+  twilight adds a warm red tint. These presets also adjust the garage clock to
+  actual solar noon, sunset or two hours after sunset for the selected date.
+- Thunderstorms have occasional gentle lightning, starting after 12 seconds
+  and then every 37 seconds while camera flight is running. Disable **Lightning**
+  in **3D options**; reduced-motion preferences also disable flashes.
+  Rain, snow and sunlight animate during camera flight.
   Pausing the daily cycle also pauses automatic weather changes. Weather is
   hidden during the annual astronomy preview.
 - A one-year preview from the selected date, with sun, moon, selected planets
@@ -39,6 +48,11 @@ starts on today's date and displays times in UTC. The example location
 Shadow end (**SE**) remains `--:--` because no site-specific shadow model is
 included. This is a visual demonstration, not a battery-management or engineering
 simulation.
+
+Weather presentation updated 12 November 2026. The effects reuse the existing
+render loop with a slightly denser cloud layer (19% higher opacity).
+The daily-cycle timer is unchanged, with no new API requests. Cloud and fog
+layers are static; this reduces work but does not promise zero GPU cost.
 
 ## Run Locally
 

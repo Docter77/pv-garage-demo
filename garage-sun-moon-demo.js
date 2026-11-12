@@ -1,4 +1,4 @@
-import {GarageOrbit3D} from './garage/garage-orbit-3d-v283.js';
+import {GarageOrbit3D} from './garage/garage-orbit-3d-v283.js?v=20261112';
 import SunCalc from './garage/suncalc-1.9.0.esm.js';
 import {planetPosition} from './garage/garage-planet-position-v1.js';
 const D=180/Math.PI,lat=52,lon=13;
@@ -53,7 +53,23 @@ export class GarageSunMoonDemo extends HTMLElement {
   this.shadowRoot.getElementById('sun').textContent=`Sun ${sun.elevation.toFixed(1)}° · SR ${clock(times.sunrise)} / SS ${clock(times.sunset)}`;
   this.shadowRoot.getElementById('moon').textContent=`Moon ${moon.elevation.toFixed(1)}°`;
  }
- setWeather(weather){this.demoWeather=weather;if(this.view?.data){this.view.data={...this.view.data,weather};this.view.requestRender();}}
+ setWeather(weather){
+  this.demoWeather=weather;
+  if(!this.view?.data)return;
+  const lighting=weather?.lighting||'day';
+  if(lighting!==this.weatherLighting&&!this.view.annualPreview?.running){
+   this.weatherLighting=lighting;
+   const base=Date.parse(this.shadowRoot.getElementById('date').value+'T00:00:00Z');
+   const times=SunCalc.getTimes(new Date(base+43200000),lat,lon);
+   const target=lighting==='day'?+times.solarNoon:+times.sunset+(lighting==='night'?7200000:0);
+   if(Number.isFinite(target)){
+    this.minute=((Math.round((target-base)/60000)%1440)+1440)%1440;
+    this.shadowRoot.getElementById('time').value=this.minute;
+    this.update();return;
+   }
+  }
+  this.view.data={...this.view.data,weather};this.view.requestRender();
+ }
  disconnectedCallback(){this.observer?.disconnect();this.view?.dispose();this.view=null;}
 }
 customElements.define('garage-sun-moon-demo',GarageSunMoonDemo);
