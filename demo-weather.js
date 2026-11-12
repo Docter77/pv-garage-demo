@@ -1,7 +1,7 @@
 const cycle=['sun','cloud','rain','pouring','snow','mixed','storm','fog','twilight','night','wind'];
 const presets={
  sun:{label:'Sunny / calm',energy:'sun',sun:1,condition:'sunny',rain:false,wind:{speed:2,gust:3,from:90}},
- cloud:{label:'Cloudy / light breeze',energy:'cloud',sun:.25,condition:'cloudy',rain:false,wind:{speed:8,gust:12,from:160}},
+ cloud:{label:'Cloudy / light breeze',energy:'cloud',sun:.25,condition:'partlycloudy',rain:false,wind:{speed:8,gust:12,from:160}},
  rain:{label:'Rain / dense clouds',energy:'overcast',sun:.06,condition:'rainy',rain:true,rainLevel:2,wind:{speed:16,gust:28,from:230}},
  pouring:{label:'Heavy rain / overcast',energy:'overcast',sun:.02,condition:'pouring',rain:true,rainLevel:3,wind:{speed:19,gust:32,from:240}},
  snow:{label:'Snow',energy:'overcast',sun:.08,condition:'snowy',rain:false,wind:{speed:4,gust:6,from:30}},
