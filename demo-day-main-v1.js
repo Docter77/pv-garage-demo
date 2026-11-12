@@ -1,8 +1,8 @@
 import './pv-flow-lite-card.js';
-import './garage-sun-moon-demo.js?v=20261112';
+import './garage-sun-moon-demo.js?v=20261112b';
 import {advanceDay,initialValues,dailyKeys} from './demo-day-model-v1.js';
 import {garageBackgroundPaused} from './garage-render-pause.js?v=1';
-import {demoWeather} from './demo-weather.js?v=20261112';
+import {demoWeather} from './demo-weather.js?v=20261112b';
 const card=document.querySelector('pv-flow-lite-card'),weather=document.getElementById('scenario'),play=document.getElementById('animate'),clock=document.getElementById('demo-clock');
 let values=initialValues(),minute=360,day=1,timer=null,weatherTick=0;
 function currentWeather(){return demoWeather(weather.value,weatherTick);}

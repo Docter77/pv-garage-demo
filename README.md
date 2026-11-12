@@ -27,13 +27,18 @@ automatically; their controls can pause them independently.
 - Automatic weather changes every 20 seconds: sunshine, clouds, rain, heavy rain,
   snow, sleet, thunderstorms, fog, dusk, night and wind. Select any condition
   manually to keep it. Rain has three intensities; rainy skies are denser than
-  cloudy skies. Snow falls gently, while fog wisps stay static.
+  partly cloudy skies. Six cloud patches cover rain, overcast and snow scenes;
+  thunderstorm clouds are dark. Snow now has 96 flakes (48 in sleet), three times
+  the earlier amount. Heavy rain and thunderstorms show up to 72 rain streaks,
+  also three times the earlier amount. Fog wisps stay static.
 - A red-and-white 3D windsock shows four wind strengths and downwind direction,
-  without flutter. Night darkens the garage and lights two virtual wall lamps;
+  without flutter. Night darkens the garage and shows two warm light patches:
+  between the front garage doors and beside the rear person door. Both patches
+  share one draw call; there are no lamp fixtures, point lights or shadow maps;
   twilight adds a warm red tint. These presets also adjust the garage clock to
   actual solar noon, sunset or two hours after sunset for the selected date.
-- Thunderstorms have occasional gentle lightning, starting after 12 seconds
-  and then every 37 seconds while camera flight is running. Disable **Lightning**
+- Thunderstorms have gentle individual lightning pulses, starting after 4 seconds
+  and then every 12 seconds while camera flight is running. Disable **Lightning**
   in **3D options**; reduced-motion preferences also disable flashes.
   Rain, snow and sunlight animate during camera flight.
   Pausing the daily cycle also pauses automatic weather changes. Weather is
