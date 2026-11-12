@@ -1,5 +1,5 @@
 import * as THREE from './three-r180.module.min.js';
-import { GarageWeather } from './garage-weather-v9.js?v=20261112b';
+import { GarageWeather } from './garage-weather-v9.js?v=20261112c';
 import { holdGarageBackground } from '../garage-render-pause.js?v=1';
 import { OrbitControls } from './OrbitControls-r180.js';
 import { Line2 } from './Line2-r180.js';
