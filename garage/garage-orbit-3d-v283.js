@@ -1,5 +1,5 @@
 import * as THREE from './three-r180.module.min.js';
-import { GarageWeather } from './garage-weather-v2.js';
+import { GarageWeather } from './garage-weather-v9.js';
 import { holdGarageBackground } from '../garage-render-pause.js?v=1';
 import { OrbitControls } from './OrbitControls-r180.js';
 import { Line2 } from './Line2-r180.js';
@@ -156,6 +156,22 @@ export class GarageOrbit3D {
     options.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18M8 3v6M16 9v6M10 15v6"/></svg>';
     options.onclick = () => this.openOptions();
     tools.append(options);
+    this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.lightningEnabled = true;
+    try { this.lightningEnabled = localStorage.getItem('pvGarageDemoRich.lightning') !== 'false'; } catch (_) {}
+    const lightningLabel = document.createElement('label');
+    lightningLabel.style.cssText = 'display:block;margin-top:10px';
+    lightningLabel.innerHTML = '<input type="checkbox" class="lightning-choice"> Lightning';
+    const lightningChoice = lightningLabel.querySelector('input');
+    lightningChoice.checked = this.lightningEnabled;
+    lightningChoice.disabled = this.reducedMotion;
+    lightningLabel.title = this.reducedMotion ? 'Disabled by reduced-motion preference' : 'Occasional gentle flashes during thunderstorms';
+    lightningChoice.onchange = () => {
+      this.lightningEnabled = lightningChoice.checked;
+      try { localStorage.setItem('pvGarageDemoRich.lightning', String(this.lightningEnabled)); } catch (_) {}
+      this.requestRender();
+    };
+    this.optionsDialog.append(lightningLabel);
     const houseMode = document.createElement('select');
     houseMode.className = 'house-mode';
     houseMode.title = 'Nearby buildings: Auto shows possible obstructions near the sun or moon, with a five-minute margin (estimated geometry)';
@@ -285,11 +301,12 @@ export class GarageOrbit3D {
         this.showError('3D rendering interrupted. Please reload the demo.');
       };
       this.renderer.domElement.addEventListener('webglcontextlost', this.onLost);
-      this.scene.add(new THREE.HemisphereLight(0xe5f3ff, 0x68716f, 2.5));
+      const ambient = new THREE.HemisphereLight(0xe5f3ff, 0x68716f, 2.5);
+      this.scene.add(ambient);
       const key = new THREE.DirectionalLight(0xffffff, 2);
       key.position.set(8, 16, 12);
       this.scene.add(key);
-      this.weather = new GarageWeather(this.scene, key);
+      this.weather = new GarageWeather(this.scene, key, ambient);
       this.building = new THREE.Group();
       this.neighborhood = new THREE.Group();
       this.horizon = new THREE.Group();
@@ -466,7 +483,8 @@ export class GarageOrbit3D {
         }
         const zooming = this.advanceZoom(timestamp);
         if (this.playing) this.frameFlight(seconds);
-        this.weather?.frame(this.data?.weather, !!this.data?.weather && !this.annualPreview?.running, seconds, this.data?.sun?.elevation > 0);
+        this.weather?.frame(this.data?.weather, !!this.data?.weather && !this.annualPreview?.running, seconds, this.data?.sun?.elevation,
+          this.lightningEnabled && this.playing && !this.reducedMotion);
         this.renderer.render(this.scene, this.camera);
         this.updateShadowMarker();
         if (measureStart != null) {
