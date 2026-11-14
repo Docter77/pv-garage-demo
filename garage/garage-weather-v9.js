@@ -1,6 +1,6 @@
 import * as THREE from './three-r180.module.min.js';
-import { GarageAtmosphere } from './garage-atmosphere-v2.js?v=20261112b';
-import { GarageSkyWeather, garageSky } from './garage-sky-weather-v2.js?v=20261112c';
+import { GarageAtmosphere } from './garage-atmosphere-v2.js?v=20261114a';
+import { GarageSkyWeather, garageSky } from './garage-sky-weather-v2.js?v=20261114a';
 
 export class GarageWeather {
   constructor(scene, light, ambient) {
@@ -40,7 +40,7 @@ export class GarageWeather {
     this.flagGroup = new THREE.Group();
     this.flagGroup.name = 'garage-weather-wind';
     const poleGeometry = new THREE.CylinderGeometry(.025,.035,2.4,6);
-    this.pole = new THREE.Mesh(poleGeometry,new THREE.MeshLambertMaterial({color:0xb9c8cb}));
+    this.pole = new THREE.Mesh(poleGeometry,new THREE.MeshLambertMaterial({color:0xb9c8cb,transparent:true}));
     this.pole.position.y = 1.2;
     this.flagGroup.add(this.pole);
     const flagGeometry = new THREE.BufferGeometry();
@@ -57,7 +57,7 @@ export class GarageWeather {
     flagGeometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(110 * 3),3));
     flagGeometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
     flagGeometry.setIndex(indices);
-    this.flag = new THREE.Mesh(flagGeometry,new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide}));
+    this.flag = new THREE.Mesh(flagGeometry,new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide,transparent:true,forceSinglePass:true}));
     this.flag.position.y = 2.25;
     this.flagGroup.add(this.flag);
     this.flagGroup.visible = false;
@@ -72,53 +72,51 @@ export class GarageWeather {
   }
 
   wind(wind, live) {
-    this.flagGroup.visible = !!(live && wind);
-    if (!wind || wind === this.lastWind) return;
+    const valid = Number.isFinite(wind?.gust) && wind.gust >= 0;
+    this.flagGroup.visible = !!(live && valid);
+    if (!valid || wind === this.lastWind) return;
     this.lastWind = wind;
-    // Match RoomCard's visual weighting; gusts are not continuous wind.
-    const strength = Math.max(wind.speed,wind.gust / 2);
-    const thresholds = [4,8,16];
-    let pose = thresholds.filter(n => strength >= n).length;
-    if (this.windPose != null && pose < this.windPose
-        && strength >= thresholds[this.windPose - 1] - 1) pose = this.windPose;
+    // RoomCard gust scale: 0/8/16/24/32 km/h. Steady wind does not set the pose.
+    const strength = wind.gust / 2;
+    const pose = Math.max(0,Math.min(4,Math.floor(strength/4)));
     this.windPose = pose;
+    const opacity=Math.max(.3,Math.min(1,.3+Math.max(0,strength)/16*.7));
+    this.flag.material.opacity=this.pole.material.opacity=opacity;
+    this.flagGroup.userData.pose=['hanging','half-raised','slanted','almost-extended','extended'][pose];
+    this.flagGroup.userData.strength=strength;
+    this.flagGroup.userData.stage=pose;
+    // Rotation matrices from the live RoomCard Wind_00..04.svg assets.
+    const rotations=[[.69362,.720334],[.818904,.573925],[.911038,.412318],[.972747,.231868],[.999301,.037391]];
+    this.flag.rotation.z=-Math.atan2(rotations[pose][1],rotations[pose][0]);
     const key = `${wind.from}|${pose}`;
     if (key === this.windKey) return;
     this.windKey = key;
     // Meteorological bearing is FROM; the free edge points downwind (TO).
     this.flagGroup.rotation.y = (-90 - wind.from) * Math.PI / 180;
-    if (pose === this.geometryPose) return;
-    this.geometryPose = pose;
-    const bend = [1.48,.95,.45,.06][pose], length = 1.65;
+    if (this.windGeometryReady) return;
+    this.windGeometryReady = true;
+    const length = 1.65;
     const positions = this.flag.geometry.attributes.position.array;
     for (let band = 0; band < 5; band++) {
       for (let edge = 0; edge < 2; edge++) {
-        const t = (band + edge) / 5, angle = -bend * Math.min(1,t * 2.8);
-        // Integrate a curved centreline; the mouth stays open while the tail droops.
-        let x = .08, y = 0;
-        for (let step = 0; step < 16; step++) {
-          const u = t * (step + .5) / 16, a = -bend * Math.min(1,u * 2.8);
-          x += Math.cos(a) * length * t / 16;
-          y += Math.sin(a) * length * t / 16;
-        }
+        const t = (band + edge) / 5;
+        const x = .08+length*t;
         const radius = .25 * (1 - .66 * t);
-        const squash = [1 - .45 * t,1 - .2 * t,1,1][pose];
         for (let j = 0; j <= 10; j++) {
           const theta = j / 10 * Math.PI * 2;
           const r = radius * (1 + .045 * Math.sin(theta * 3 + t * 4) * t);
-          const cross = Math.cos(theta) * r * squash;
+          const cross = Math.cos(theta) * r;
           const offset = (band * 22 + edge * 11 + j) * 3;
-          positions.set([x - Math.sin(angle) * cross,y + Math.cos(angle) * cross,Math.sin(theta) * r],offset);
+          positions.set([x,cross,Math.sin(theta) * r],offset);
         }
       }
     }
     this.flag.geometry.attributes.position.needsUpdate = true;
     this.flag.geometry.computeVertexNormals();
     this.flag.geometry.computeBoundingSphere();
-    this.flagGroup.userData.pose = ['hanging','half-raised','slanted','extended'][pose];
   }
 
-  frame(data, live, seconds, elevation = 90, lightning = false) {
+  frame(data, live, seconds, elevation = 90, lightning = false, skyContext = null) {
     const sun = live && elevation > 0 && data?.sun != null ? data.sun : null;
     const sky = garageSky(data?.condition);
     this.rain.visible = !!(live && data?.rain && (!sky.snow || sky.mixed));
@@ -137,7 +135,7 @@ export class GarageWeather {
     if (!live) {
       this.light.intensity = this.baseIntensity;
       this.light.color.copy(this.baseColor);
-      this.atmosphere.frame(data,false,0,elevation,this.light);
+      this.atmosphere.frame(data,false,0,elevation,this.light,skyContext);
       this.sky.frame(data,false,0,elevation,this.light,false);
       return;
     }
@@ -150,7 +148,7 @@ export class GarageWeather {
       this.light.intensity = 1.6 + sun * .9 + sun * .04 * Math.sin(this.elapsed * .8);
       this.light.color.setRGB(1, 1 - sun * .06, 1 - sun * .18);
     }
-    this.atmosphere.frame(data,live,seconds,elevation,this.light);
+    this.atmosphere.frame(data,live,seconds,elevation,this.light,skyContext);
     this.sky.frame(data,live,seconds,elevation,this.light,lightning);
   }
 

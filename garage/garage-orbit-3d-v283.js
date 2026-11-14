@@ -1,5 +1,5 @@
 import * as THREE from './three-r180.module.min.js';
-import { GarageWeather } from './garage-weather-v9.js?v=20261112c';
+import { GarageWeather } from './garage-weather-v9.js?v=20261114a';
 import { holdGarageBackground } from '../garage-render-pause.js?v=1';
 import { OrbitControls } from './OrbitControls-r180.js';
 import { Line2 } from './Line2-r180.js';
@@ -248,6 +248,21 @@ export class GarageOrbit3D {
     this.expandedDialog.addEventListener('close', () => this.restoreCompact());
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x101820);
+    this.daySkyTint = new THREE.Color();
+    this.skyFloorPoint = new THREE.Vector3();
+    const skyGeometry = new THREE.BufferGeometry();
+    skyGeometry.setAttribute('position',new THREE.Float32BufferAttribute([-1,-1,0,3,-1,0,-1,3,0],3));
+    this.daySky = new THREE.Mesh(skyGeometry,new THREE.ShaderMaterial({
+      depthTest:false,depthWrite:false,toneMapped:false,
+      uniforms:{base:{value:this.scene.background.clone()},tint:{value:this.scene.background.clone()},floorY:{value:-1}},
+      vertexShader:'varying float screenY;void main(){screenY=position.y;gl_Position=vec4(position.xy,1.0,1.0);}',
+      fragmentShader:`uniform vec3 base;uniform vec3 tint;uniform float floorY;varying float screenY;
+        void main(){gl_FragColor=vec4(mix(base,tint,smoothstep(floorY,floorY+.22,screenY)),1.0);
+        #include <colorspace_fragment>
+        }`
+    }));
+    this.daySky.name='garage-subtle-sky';this.daySky.frustumCulled=false;
+    this.daySky.renderOrder=-10000;this.daySky.visible=false;this.scene.add(this.daySky);
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
     try {
       this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'low-power' });
@@ -399,12 +414,11 @@ export class GarageOrbit3D {
   frameFlight(seconds) {
     if (this.flightMode !== 'simple') { this.frameFlightSun(seconds); return; }
     const horizontal = this.flyRadius * Math.cos(this.flyElevation);
-    this.controls.target.copy(this.origin);
     this.camera.position.set(
       this.origin.x + horizontal * Math.sin(this.flyAzimuth),
       this.origin.y + this.flyRadius * Math.sin(this.flyElevation),
       this.origin.z + horizontal * Math.cos(this.flyAzimuth));
-    this.controls.update();
+    this.aimFlight(Math.atan(Math.tan(this.camera.fov * RAD / 2) / 3));
   }
 
   syncPixelRatio() {
@@ -419,7 +433,10 @@ export class GarageOrbit3D {
   advanceFlight(seconds) {
     this.flyElapsed += seconds;
     this.flyAzimuth += seconds * 6 * RAD;
-    const targetElevation = (32 + 17 * Math.sin(this.flyElapsed * Math.PI * 2 / 100)) * RAD;
+    const sunElevation = this.data?.sun?.elevation;
+    const nightScale = Number.isFinite(sunElevation)
+      ? THREE.MathUtils.lerp(.75, 1, THREE.MathUtils.smoothstep(sunElevation, -6, 6)) : 1;
+    const targetElevation = (32 + 17 * Math.sin(this.flyElapsed * Math.PI * 2 / 100)) * RAD * nightScale * .85;
     const elevation = THREE.MathUtils.lerp(this.flyStartElevation, targetElevation, 1 - Math.exp(-this.flyElapsed / 3));
     this.flyElevation = elevation;
   }
@@ -429,6 +446,7 @@ export class GarageOrbit3D {
       Math.sin(this.flyElevation), Math.cos(this.flyElevation) * Math.cos(this.flyAzimuth));
     this.camera.position.copy(this.origin).addScaledVector(direction, this.flyRadius);
     const forward = new THREE.Vector3(-Math.sin(this.flyAzimuth), 0, -Math.cos(this.flyAzimuth));
+    const focusPitch = this.flightFocusPitch();
     let requiredOffset = 0;
     const sun = this.data?.sun;
     if (Number.isFinite(sun?.azimuth) && Number.isFinite(sun?.elevation) && this.renderHeight && this.renderWidth) {
@@ -441,15 +459,36 @@ export class GarageOrbit3D {
         const referenceDepth = Math.max(.1, this.flyRadius * Math.cos(offset));
         const halfSymbol = Math.max(SKY_MARKER_MIN_PIXELS, SKY_MARKER_DIAMETER * this.renderHeight / (2 * referenceDepth * tanV)) / 2;
         const top = 1 - 2 * Math.min(this.renderHeight * .42, halfSymbol + 32) / this.renderHeight;
-        requiredOffset = Math.max(0, sunPitch + this.flyElevation - Math.atan(tanV * top));
+        requiredOffset = Math.max(0, sunPitch - focusPitch - Math.atan(tanV * top));
       }
     }
-    // Prioritize the garage: its center stays within 10% of viewport height below center.
-    const maxPitchOffset = Math.atan(Math.tan(this.camera.fov * RAD / 2) * 0.2);
-    this.flyPitchOffset = Math.min(maxPitchOffset, Math.max(requiredOffset, (this.flyPitchOffset || 0) * Math.exp(-seconds / 1.5)));
-    const pitch = THREE.MathUtils.clamp(-this.flyElevation + this.flyPitchOffset, -85 * RAD, 85 * RAD);
-    const look = forward.multiplyScalar(Math.cos(pitch)); look.y = Math.sin(pitch);
-    this.controls.target.copy(this.camera.position).addScaledVector(look, this.flyRadius);
+    // Keep the garage at 2/3 height, with at most 70% for sun framing.
+    const tanV = Math.tan(this.camera.fov * RAD / 2);
+    const basePitchOffset = Math.atan(tanV / 3), maxPitchOffset = Math.atan(tanV * .4);
+    this.flyPitchOffset = Math.min(maxPitchOffset, Math.max(basePitchOffset, requiredOffset, (this.flyPitchOffset || 0) * Math.exp(-seconds / 1.5)));
+    this.aimFlight(this.flyPitchOffset);
+  }
+
+  flightFocusPitch() {
+    const focus = this.flightFocus || this.origin;
+    return Math.atan2(focus.y - this.camera.position.y,
+      Math.hypot(focus.x - this.camera.position.x, focus.z - this.camera.position.z));
+  }
+
+  aimFlight(pitchOffset) {
+    let pitch = THREE.MathUtils.clamp(this.flightFocusPitch() + pitchOffset, -85 * RAD, 85 * RAD);
+    const sinAz = Math.sin(this.flyAzimuth), cosAz = Math.cos(this.flyAzimuth);
+    // Keep the slab above the bottom edge without changing zoom or camera distance.
+    const lowerField = Math.atan(Math.tan(this.camera.fov * RAD / 2) * .96);
+    for (const p of this.flightFloor || []) {
+      const depth = -(p.x - this.camera.position.x) * sinAz - (p.z - this.camera.position.z) * cosAz;
+      if (depth > 0) pitch = Math.min(pitch, Math.atan2(p.y - this.camera.position.y, depth) + lowerField);
+    }
+    const horizontal = Math.cos(pitch) * this.flyRadius;
+    this.controls.target.set(
+      this.camera.position.x - sinAz * horizontal,
+      this.camera.position.y + Math.sin(pitch) * this.flyRadius,
+      this.camera.position.z - cosAz * horizontal);
     this.controls.update();
   }
 
@@ -483,8 +522,12 @@ export class GarageOrbit3D {
         }
         const zooming = this.advanceZoom(timestamp);
         if (this.playing) this.frameFlight(seconds);
-        this.weather?.frame(this.data?.weather, !!this.data?.weather && !this.annualPreview?.running, seconds, this.data?.sun?.elevation,
-          this.lightningEnabled && this.playing && !this.reducedMotion);
+        const weatherLive = !!this.data?.weather && !this.annualPreview?.running;
+        this.weather?.frame(this.data?.weather, weatherLive, seconds, this.data?.sun?.elevation,
+          this.lightningEnabled && !this.reducedMotion && this.playing, this.data);
+        this.updatePanelReflection(weatherLive);
+        this.updateDaySky(weatherLive);
+        this.updateSunAppearance(weatherLive);
         this.renderer.render(this.scene, this.camera);
         this.updateShadowMarker();
         if (measureStart != null) {
@@ -837,6 +880,8 @@ export class GarageOrbit3D {
 
   makeBuilding(model) {
     release(this.building); release(this.horizon);
+    this.pvGlassMaterials = {};
+    this.pvReflections = {};
     this.model = model;
     const { width, length, wallHeight, pitch, roofAzimuth } = model;
     const half = width / 2, slope = Math.tan(pitch * RAD);
@@ -860,13 +905,15 @@ export class GarageOrbit3D {
         const z = -length / 2 + 0.2 + (column + 0.5) * (length - 0.4) / 3;
         const panel = new THREE.Group();
         panel.name = 'pv-module';
+        const facing=(roofAzimuth+(side<0?180:0)+360)%360;
+        panel.userData.pvSide=facing<180?'east':'west';
         panel.position.set(x, ridge - Math.abs(x) * slope + 0.12, z);
         panel.rotation.z = -side * pitch * RAD;
         this.building.add(panel);
         const w = (half - 0.4) / 3 / Math.cos(pitch * RAD) - 0.08;
         const l = (length - 0.4) / 3 - 0.09;
         this.mesh(new THREE.BoxGeometry(w, 0.045, l), 0xaebfc7, new THREE.Vector3(), panel);
-        this.mesh(new THREE.BoxGeometry(w - 0.055, 0.012, l - 0.055), 0x213e52, new THREE.Vector3(0, 0.03, 0), panel);
+        this.mesh(new THREE.BoxGeometry(w - 0.055, 0.012, l - 0.055), 0x142a3a, new THREE.Vector3(0, 0.03, 0), panel);
         for (let cell = 1; cell < 6; cell++) {
           this.mesh(new THREE.BoxGeometry(w - 0.065, 0.006, 0.009), 0x668595, new THREE.Vector3(0, 0.039, -l / 2 + cell * l / 6), panel);
         }
@@ -897,6 +944,14 @@ export class GarageOrbit3D {
 
     this.batchPanelMeshes();
     this.prepareStaticTransforms(this.building);
+    // Frame the visible garage, not the higher PV reference point used by the sky model.
+    this.building.updateMatrixWorld(true);
+    const flightBounds = new THREE.Box3().setFromObject(this.building);
+    this.flightFocus = flightBounds.getCenter(new THREE.Vector3());
+    this.flightFloor = [];
+    for (const x of [flightBounds.min.x, flightBounds.max.x]) for (const z of [flightBounds.min.z, flightBounds.max.z]) {
+      this.flightFloor.push(new THREE.Vector3(x, flightBounds.min.y, z));
+    }
     this.makeNeighborhood(model.surroundings);
   }
 
@@ -907,15 +962,20 @@ export class GarageOrbit3D {
       panel.updateMatrix();
       for (const mesh of [...panel.children]) {
         mesh.updateMatrix();
-        const key = JSON.stringify([mesh.geometry.parameters, mesh.material.color.getHex()]);
+        const glass=mesh.material.color.getHex()===0x142a3a;
+        const key = JSON.stringify([mesh.geometry.parameters, mesh.material.color.getHex(),glass?panel.userData.pvSide:null]);
         if (!groups.has(key)) groups.set(key, []);
-        groups.get(key).push({ mesh, matrix: panel.matrix.clone().multiply(mesh.matrix) });
+        groups.get(key).push({ mesh, pvSide:panel.userData.pvSide, matrix: panel.matrix.clone().multiply(mesh.matrix) });
       }
     }
     for (const parts of groups.values()) {
       const first = parts[0].mesh;
       const batch = new THREE.InstancedMesh(first.geometry, first.material, parts.length);
       batch.name = 'pv-module-parts';
+      if (first.material.color.getHex() === 0x142a3a) {
+        this.pvGlassMaterials[parts[0].pvSide] = first.material;
+        batch.userData.pvSide=parts[0].pvSide;
+      }
       parts.forEach(({ mesh, matrix }, index) => {
         batch.setMatrixAt(index, matrix);
         mesh.removeFromParent();
@@ -935,6 +995,74 @@ export class GarageOrbit3D {
       object.matrixAutoUpdate = false;
     });
     group.updateMatrixWorld(true);
+  }
+
+  updatePanelReflection(live) {
+    const weather=this.data?.weather;
+    const elevation=this.data?.sun?.elevation;
+    for(const side of ['east','west']) {
+      const key=side==='east'?'pvEastWatts':'pvWestWatts';
+      // Legacy synthetic demos can still supply a shared value; HA supplies both keys.
+      const watts=weather&&key in weather?weather[key]:weather?.pvWatts;
+      const material=this.pvGlassMaterials?.[side];
+      const amount=live && Number.isFinite(watts) && Number.isFinite(elevation)
+        ? THREE.MathUtils.clamp(watts/3000,0,1)*THREE.MathUtils.smoothstep(elevation,0,6) : 0;
+      if (!material || amount===this.pvReflections[side]) continue;
+      this.pvReflections[side]=amount;
+      // Two fixed glass batches reuse the scene light; only one additional draw call.
+      // Lift medium output visibly without changing the watt scale or its smoothing.
+      const shine=.85*Math.sqrt(amount);
+      material.roughness=.8-.64*shine;
+      material.metalness=.12+.22*shine;
+      material.color.setHex(0x142a3a).lerp(new THREE.Color(0x9bccdf),shine*.54);
+      material.emissive.setHex(0x92c8e8);
+      material.emissiveIntensity=.12*shine;
+    }
+  }
+
+  updateDaySky(live) {
+    const weather=this.data?.weather,elevation=this.data?.sun?.elevation;
+    const day=live&&Number.isFinite(elevation)?THREE.MathUtils.smoothstep(elevation,0,12):0;
+    const condition=weather?.condition;
+    let tint=0x596d7a;
+    if(weather?.fog||condition==='fog')tint=0x849096;
+    else if(condition==='lightning'||condition==='lightning-rainy')tint=0x303b48;
+    else if(condition==='pouring')tint=0x424f5c;
+    else if(condition==='snowy'||condition==='snowy-rainy')tint=0x87949d;
+    else if(weather?.rain||condition==='rainy')tint=0x536270;
+    else if(condition==='cloudy')tint=0x687784;
+    else if(condition==='partlycloudy')tint=0x607581;
+    else if(condition==='sunny'||condition==='clear-night')tint=0x526f83;
+    this.daySky.visible=day>0&&!!this.flightFloor?.length;
+    if(!this.daySky.visible)return;
+    if(this.skyTint!==tint||this.skyDay!==day){
+      this.skyTint=tint;this.skyDay=day;
+      this.daySky.material.uniforms.tint.value.setHex(0x101820).lerp(this.daySkyTint.setHex(tint),day*.088);
+    }
+    // One background triangle; the foreground below the projected slab stays neutral.
+    this.camera.updateMatrixWorld();
+    let floor=1;
+    for(const corner of this.flightFloor){
+      this.skyFloorPoint.copy(corner).project(this.camera);
+      if(Number.isFinite(this.skyFloorPoint.y))floor=Math.min(floor,this.skyFloorPoint.y);
+    }
+    this.daySky.material.uniforms.floorY.value=THREE.MathUtils.clamp(floor,-1,1);
+  }
+
+  updateSunAppearance(live) {
+    const marker=this._sunMarker,elevation=this.data?.sun?.elevation;
+    if(!marker)return;
+    const raw=this.data?.weather?.sun;
+    const strength=live&&Number.isFinite(raw)?THREE.MathUtils.clamp(raw,0,1):live?0:1;
+    const twilight=live&&Number.isFinite(elevation)&&elevation>-6&&elevation<6
+      ? Math.cos(elevation*Math.PI/12)**2 : 0;
+    const key=`${strength}|${twilight}|${live&&elevation< -6}`;
+    if(marker.userData.appearanceKey===key)return;
+    marker.userData.appearanceKey=key;
+    marker.material.color.setHex(0xffffff).lerp(new THREE.Color(0xffdf32),strength)
+      .lerp(new THREE.Color(0xff6542),twilight);
+    marker.material.opacity=live&&elevation< -6?.55:1;
+    marker.userData.markerScale=live?.96+.08*strength:1;
   }
 
   orbitRadius() {
@@ -1028,7 +1156,7 @@ export class GarageOrbit3D {
     // Draw the translucent base before the other transparent objects, without masking paths below it.
     tint.renderOrder = -1;
     this.horizon.add(tint);
-    for (const [body, color, opacity] of [['sun', 0xaebbc2, 0.24], ['moon', MOON, 0.30], ['planet', 0xaebbc2, 0.20]]) {
+    for (const [body, color, opacity] of [['sun', 0xaebbc2, 0.24], ['moon', MOON, 0.20], ['planet', 0xaebbc2, 0.14]]) {
       const ring = [];
       const radius = this.skyRadius * this.orbitScale(body);
       for (let angle = 0; angle <= 360; angle += 2) ring.push(skyVector(angle, 0, radius).add(this.origin));
@@ -1265,14 +1393,15 @@ export class GarageOrbit3D {
         if (previous < 0) {
           // Mesh-based lines support subpixel widths, unlike native WebGL lines.
           const geometry = new LineGeometry().setPositions(run.flatMap(point => point.toArray()));
-          const material = new LineMaterial({ color, linewidth: 0.5, dashed: true,
+          const material = new LineMaterial({ color, linewidth: body==='moon'?.35:.5, dashed: true,
+            transparent:body==='moon', opacity:body==='moon'?.4:1,
             dashSize: 0.19, gapSize: 0.13, alphaToCoverage: true });
           const line = new Line2(geometry, material);
           line.name = 'night-trajectory';
           line.userData.body = body;
           line.computeLineDistances();
           this.paths.add(line);
-        } else this.line(run, color, false, this.paths).userData.body = body;
+        } else this.line(run, color, false, this.paths,body==='moon'?.6:1).userData.body = body;
       }
       run = [];
     };
@@ -1354,7 +1483,7 @@ export class GarageOrbit3D {
       const pixelSize = 2 * Math.max(0, -cameraPoint.z) * Math.tan(camera.fov * RAD / 2) / Math.max(1, this.renderHeight);
       // Use the common scene-center distance: neither body grows when its symbolic orbit comes closer.
       const referencePixelSize = 2 * Math.max(0.1, -referencePoint.z) * Math.tan(camera.fov * RAD / 2) / Math.max(1, this.renderHeight);
-      const size = Math.max(diameter / referencePixelSize, minimumPixels) * pixelSize;
+      const size = Math.max(diameter / referencePixelSize, minimumPixels) * pixelSize * (sprite.userData.markerScale ?? 1);
       sprite.scale.set(size, size, 1);
       sprite.updateMatrixWorld();
     };
@@ -1366,7 +1495,7 @@ export class GarageOrbit3D {
     canvas.width = canvas.height = 80;
     const ctx = canvas.getContext('2d');
     ctx.lineCap = 'round';
-    for (const [color, width] of [['#000000', 4], ['#ffbd28', 2]]) {
+    for (const [color, width] of [['#000000', 4], ['#ffffff', 2]]) {
       ctx.strokeStyle = color; ctx.lineWidth = width;
       for (let i = 0; i < 8; i++) {
         const a = i * Math.PI / 4;
@@ -1375,9 +1504,9 @@ export class GarageOrbit3D {
       }
     }
     ctx.beginPath(); ctx.arc(40, 40, 28, 0, Math.PI * 2);
-    if (elevation >= 0) { ctx.fillStyle = '#ffdf32'; ctx.fill(); }
+    if (elevation >= 0) { ctx.fillStyle = '#ffffff'; ctx.fill(); }
     ctx.strokeStyle = '#000000'; ctx.lineWidth = elevation < 0 ? 9 : 4; ctx.stroke();
-    if (elevation < 0) { ctx.strokeStyle = '#ffdf32'; ctx.lineWidth = 6; ctx.stroke(); }
+    if (elevation < 0) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 6; ctx.stroke(); }
     const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
     const sprite = this.skyMarker(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: true, depthWrite: false, opacity: 1 }), SKY_MARKER_DIAMETER, SKY_MARKER_MIN_PIXELS);
     sprite.name = 'sun-marker'; sprite.position.copy(point);
@@ -1613,7 +1742,7 @@ export class GarageOrbit3D {
         let run = [];
         const flush = () => {
           if (run.length > 1) {
-            const line = this.line(run, body.color, below, this.planetPaths, below ? 0.35 : 0.65);
+            const line = this.line(run, body.color, below, this.planetPaths, below ? 0.22 : 0.42);
             line.material.depthWrite = false;
             line.name = 'planet-path'; line.userData.planet = body.id;
             line.userData.below = below;
@@ -1667,6 +1796,8 @@ export class GarageOrbit3D {
       this.geometryKey = geometryKey;
       this.makeBuilding(data.model);
       this.weather?.place(data.model);
+      this.weather?.atmosphere.stars.position.copy(this.origin);
+      this.weather?.atmosphere.starLines.position.copy(this.origin);
       this.cameraReady = false;
     }
     const housesChanged = this.refreshNeighborhood();

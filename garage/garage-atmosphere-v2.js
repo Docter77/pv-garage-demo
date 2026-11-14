@@ -1,4 +1,5 @@
 import * as THREE from './three-r180.module.min.js';
+import { STAR_CATALOG, STAR_EDGES, starPositions, visibleStarEdges } from './garage-stars-v1.js';
 
 export class GarageAtmosphere {
   constructor(scene, ambient) {
@@ -7,9 +8,34 @@ export class GarageAtmosphere {
     this.baseIntensity = ambient.intensity;
     this.baseSky = ambient.color.clone();
     this.baseGround = ambient.groundColor.clone();
-    this.nightSky = new THREE.Color(0x7e91b0);
-    this.nightGround = new THREE.Color(0x30343d);
+    this.nightSky = new THREE.Color(0xe4e9ee);
+    this.nightGround = new THREE.Color(0x89919a);
     this.twilight = new THREE.Color(0xff7451);
+    const starsGeometry=new THREE.BufferGeometry();
+    starsGeometry.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(STAR_CATALOG.length*3),3));
+    starsGeometry.setAttribute('starSize',new THREE.Float32BufferAttribute(new Float32Array(STAR_CATALOG.length),1));
+    starsGeometry.setDrawRange(0,0);
+    this.stars=new THREE.Points(starsGeometry,new THREE.ShaderMaterial({
+      transparent:true,depthWrite:false,
+      uniforms:{amount:{value:0}},
+      vertexShader:`attribute float starSize;varying float strength;
+        void main(){strength=min(1.0,.7+(starSize-1.8)*.25);gl_PointSize=starSize;
+        gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+      fragmentShader:`uniform float amount;varying float strength;
+        void main(){float d=length(gl_PointCoord-vec2(.5));
+        float a=(1.0-smoothstep(.12,.5,d))*strength*amount;
+        gl_FragColor=vec4(.91,.95,1.0,a);}`
+    }));
+    this.stars.name='garage-clear-night-stars';this.stars.visible=false;
+    this.stars.frustumCulled=false;
+    this.stars.renderOrder=-10;scene.add(this.stars);
+    const lineGeometry=new THREE.BufferGeometry();
+    lineGeometry.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(STAR_EDGES.length*6),3));
+    lineGeometry.setDrawRange(0,0);
+    this.starLines=new THREE.LineSegments(lineGeometry,new THREE.LineBasicMaterial({color:0x8cacc2,transparent:true,opacity:0,depthWrite:false}));
+    this.starLines.name='garage-constellation-lines';this.starLines.visible=false;
+    this.starLines.frustumCulled=false;this.starLines.renderOrder=-11;scene.add(this.starLines);
+    this.starKey=null;this.starValid=false;
     this.lamps = new THREE.Group();
     this.lamps.name = 'garage-night-lamps';
     this.lamps.visible = false;
@@ -68,11 +94,40 @@ export class GarageAtmosphere {
     this.washes.instanceMatrix.needsUpdate=true;this.washes.computeBoundingSphere();
   }
 
-  frame(data, live, seconds, elevation, key) {
+  updateStars(sky) {
+    const time=sky?.now,latitude=sky?.solarYear?.latitude,longitude=sky?.solarYear?.longitude;
+    const minute=Number.isFinite(time)?Math.floor(time/60000):NaN,cacheKey=`${minute}/${latitude}/${longitude}`;
+    if(cacheKey===this.starKey)return this.starValid;
+    this.starKey=cacheKey;
+    const positions=starPositions(minute*60000,latitude,longitude);
+    this.starValid=!!positions;
+    if(!positions){this.stars.geometry.setDrawRange(0,0);this.starLines.geometry.setDrawRange(0,0);return false;}
+    const points=this.stars.geometry.attributes.position,sizes=this.stars.geometry.attributes.starSize;
+    let count=0;
+    positions.forEach((p,i)=>{
+      if(p[1]<=0)return;
+      points.setXYZ(count,p[0]*85,p[1]*85,p[2]*85);
+      sizes.setX(count,THREE.MathUtils.clamp(3.3-STAR_CATALOG[i][4]*.4,1.8,3.6));count++;
+    });
+    points.needsUpdate=true;sizes.needsUpdate=true;this.stars.geometry.setDrawRange(0,count);
+    const edges=visibleStarEdges(positions),lines=this.starLines.geometry.attributes.position;
+    edges.forEach((v,i)=>{lines.array[i]=v*85;});lines.needsUpdate=true;
+    this.starLines.geometry.setDrawRange(0,edges.length/3);
+    return true;
+  }
+
+  frame(data, live, seconds, elevation, key, sky) {
     const active=live&&Number.isFinite(elevation);
     const day=active?THREE.MathUtils.smoothstep(elevation,-6,6):1;
     const dusk=active?Math.sin(day*Math.PI):0;
-    this.ambient.intensity=THREE.MathUtils.lerp(.4,this.baseIntensity,day);
+    const clear=live && ['clear-night','sunny'].includes(data?.condition) && !data?.rain && !data?.fog;
+    let stars=active&&clear?1-THREE.MathUtils.smoothstep(elevation,-10,-4):0;
+    if(stars>.005&&!this.updateStars(sky))stars=0;
+    this.stars.visible=stars>.005;this.stars.material.uniforms.amount.value=stars;
+    this.starLines.visible=this.stars.visible&&this.starLines.geometry.drawRange.count>0;
+    this.starLines.material.opacity=stars*.20;
+    // Neutral moonlight fill keeps both gables readable without another light/shadow pass.
+    this.ambient.intensity=THREE.MathUtils.lerp(1.10,this.baseIntensity,day);
     this.ambient.color.copy(this.nightSky).lerp(this.baseSky,day).lerp(this.twilight,dusk*.38);
     this.ambient.groundColor.copy(this.nightGround).lerp(this.baseGround,day);
     if(active){key.intensity*=.06+.94*day;key.color.lerp(this.twilight,dusk*.8);}
@@ -86,6 +141,8 @@ export class GarageAtmosphere {
   dispose() {
     this.ambient.intensity=this.baseIntensity;this.ambient.color.copy(this.baseSky);this.ambient.groundColor.copy(this.baseGround);
     this.lamps.removeFromParent();this.mist.removeFromParent();
+    this.stars.removeFromParent();this.stars.geometry.dispose();this.stars.material.dispose();
+    this.starLines.removeFromParent();this.starLines.geometry.dispose();this.starLines.material.dispose();
     for(const mesh of [this.washes,this.mist]){mesh.dispose?.();mesh.geometry.dispose();mesh.material.dispose();}
   }
 }
