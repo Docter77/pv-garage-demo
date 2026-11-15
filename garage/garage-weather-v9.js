@@ -1,6 +1,6 @@
 import * as THREE from './three-r180.module.min.js';
-import { GarageAtmosphere } from './garage-atmosphere-v2.js?v=20261114a';
-import { GarageSkyWeather, garageSky } from './garage-sky-weather-v2.js?v=20261114a';
+import { GarageAtmosphere } from './garage-atmosphere-v2.js?v=20261115a';
+import { GarageSkyWeather, garageSky } from './garage-sky-weather-v2.js?v=20261115a';
 
 export class GarageWeather {
   constructor(scene, light, ambient) {
@@ -39,8 +39,10 @@ export class GarageWeather {
     scene.add(this.rain);
     this.flagGroup = new THREE.Group();
     this.flagGroup.name = 'garage-weather-wind';
+    // Keep this indicator in front of translucent weather, but behind solid buildings.
+    this.flagGroup.renderOrder = 20;
     const poleGeometry = new THREE.CylinderGeometry(.025,.035,2.4,6);
-    this.pole = new THREE.Mesh(poleGeometry,new THREE.MeshLambertMaterial({color:0xb9c8cb,transparent:true}));
+    this.pole = new THREE.Mesh(poleGeometry,new THREE.MeshLambertMaterial({color:0xb9c8cb,transparent:true,fog:false}));
     this.pole.position.y = 1.2;
     this.flagGroup.add(this.pole);
     const flagGeometry = new THREE.BufferGeometry();
@@ -57,7 +59,7 @@ export class GarageWeather {
     flagGeometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(110 * 3),3));
     flagGeometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
     flagGeometry.setIndex(indices);
-    this.flag = new THREE.Mesh(flagGeometry,new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide,transparent:true,forceSinglePass:true}));
+    this.flag = new THREE.Mesh(flagGeometry,new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide,transparent:true,forceSinglePass:true,fog:false}));
     this.flag.position.y = 2.25;
     this.flagGroup.add(this.flag);
     this.flagGroup.visible = false;

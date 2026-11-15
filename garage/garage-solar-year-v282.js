@@ -21,13 +21,15 @@ export class SolarYearPreview {
     this.caches = new Map();
     this.locationSelect = document.createElement('select');
     this.locationSelect.className = 'year-location';
-    this.locationSelect.title = 'Location for annual preview only';
-    this.locationSelect.setAttribute('aria-label', 'Annual preview location');
+    this.locationSelect.title = 'Location for sun, moon and annual preview';
+    this.locationSelect.setAttribute('aria-label', 'Sun and moon location');
     for (const { id, label } of LOCATIONS) this.locationSelect.add(new Option(label, id));
     this.locationSelect.onchange = () => {
+      const selected = this.locationSelect.value;
       const restart = this.running || this.loading;
       this.stop();
-      this.locationId = this.locationSelect.value;
+      this.locationId = selected;
+      this.view.host.dispatchEvent(new CustomEvent('garage-location-change', {detail:{id:selected},bubbles:true,composed:true}));
       if (restart) this.start();
     };
     view.root.querySelector('.tools').append(this.locationSelect);
@@ -41,7 +43,7 @@ export class SolarYearPreview {
 
   request(data = this.view.data) {
     const selected = LOCATIONS.find(location => location.id === this.locationId);
-    const location = selected?.id === 'home' ? data?.solarYear : selected;
+    const location = selected?.id === 'home' ? data?.homeLocation || data?.solarYear : selected;
     if (!location || !Number.isFinite(location.latitude) || !Number.isFinite(location.longitude) || !Number.isFinite(data.now)) return null;
     try {
       const parts = Object.fromEntries(new Intl.DateTimeFormat('en', { timeZone:location.timeZone,
@@ -183,7 +185,7 @@ export class SolarYearPreview {
     const panel = v.root.querySelector('.expanded-times');
     panel.title = `${this.locationLabel}: local time in annual preview`;
     v.root.querySelector('.expanded-metrics').title = 'Selected demo-day values, not annual preview';
-    v.root.querySelector('.expanded-metrics').dataset.liveLocation = 'Demo day';
+    v.root.querySelector('.expanded-metrics').dataset.liveLocation = `Demo day: ${v.data?.location?.label || 'Example location'}`;
     this.syncButton();
     this.drawDay(0);
     this.resume();
@@ -445,11 +447,11 @@ export class SolarYearPreview {
     for (const [group, visible] of this.hiddenGroups || []) group.visible = visible;
     this.hiddenGroups = null;
     if (wasActive && !this.view.disposed) {
-      this.view.displayKey = null;
-      this.view.updateExpandedDetails(this.view.data?.display);
       this.view.root.querySelector('.expanded-times').removeAttribute('title');
       this.view.root.querySelector('.expanded-metrics').removeAttribute('title');
       delete this.view.root.querySelector('.expanded-metrics').dataset.liveLocation;
+      this.view.displayKey = null;
+      this.view.updateExpandedDetails(this.view.data?.display);
     }
     this.status.hidden = true; this.syncButton();
     if (wasActive && restore && !this.view.disposed) {

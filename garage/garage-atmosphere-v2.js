@@ -17,13 +17,13 @@ export class GarageAtmosphere {
     starsGeometry.setDrawRange(0,0);
     this.stars=new THREE.Points(starsGeometry,new THREE.ShaderMaterial({
       transparent:true,depthWrite:false,
-      uniforms:{amount:{value:0}},
+      uniforms:{amount:{value:0},brightness:{value:1.5}},
       vertexShader:`attribute float starSize;varying float strength;
         void main(){strength=min(1.0,.7+(starSize-1.8)*.25);gl_PointSize=starSize;
         gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
-      fragmentShader:`uniform float amount;varying float strength;
+      fragmentShader:`uniform float amount;uniform float brightness;varying float strength;
         void main(){float d=length(gl_PointCoord-vec2(.5));
-        float a=(1.0-smoothstep(.12,.5,d))*strength*amount;
+        float a=min(1.0,(1.0-smoothstep(.12,.5,d))*strength*brightness)*amount;
         gl_FragColor=vec4(.91,.95,1.0,a);}`
     }));
     this.stars.name='garage-clear-night-stars';this.stars.visible=false;
@@ -121,11 +121,11 @@ export class GarageAtmosphere {
     const day=active?THREE.MathUtils.smoothstep(elevation,-6,6):1;
     const dusk=active?Math.sin(day*Math.PI):0;
     const clear=live && ['clear-night','sunny'].includes(data?.condition) && !data?.rain && !data?.fog;
-    let stars=active&&clear?1-THREE.MathUtils.smoothstep(elevation,-10,-4):0;
+    let stars=active&&clear?1-THREE.MathUtils.smoothstep(elevation,-6,-4):0;
     if(stars>.005&&!this.updateStars(sky))stars=0;
     this.stars.visible=stars>.005;this.stars.material.uniforms.amount.value=stars;
     this.starLines.visible=this.stars.visible&&this.starLines.geometry.drawRange.count>0;
-    this.starLines.material.opacity=stars*.20;
+    this.starLines.material.opacity=stars*.36;
     // Neutral moonlight fill keeps both gables readable without another light/shadow pass.
     this.ambient.intensity=THREE.MathUtils.lerp(1.10,this.baseIntensity,day);
     this.ambient.color.copy(this.nightSky).lerp(this.baseSky,day).lerp(this.twilight,dusk*.38);

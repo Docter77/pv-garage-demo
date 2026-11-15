@@ -1,5 +1,6 @@
 import * as THREE from './three-r180.module.min.js';
-import { GarageWeather } from './garage-weather-v9.js?v=20261114a';
+import { makeShadowReceiver, projectHouseShadow } from './garage-surface-shadow-v1.js';
+import { GarageWeather } from './garage-weather-v9.js?v=20261115a';
 import { holdGarageBackground } from '../garage-render-pause.js?v=1';
 import { OrbitControls } from './OrbitControls-r180.js';
 import { Line2 } from './Line2-r180.js';
@@ -254,10 +255,14 @@ export class GarageOrbit3D {
     skyGeometry.setAttribute('position',new THREE.Float32BufferAttribute([-1,-1,0,3,-1,0,-1,3,0],3));
     this.daySky = new THREE.Mesh(skyGeometry,new THREE.ShaderMaterial({
       depthTest:false,depthWrite:false,toneMapped:false,
-      uniforms:{base:{value:this.scene.background.clone()},tint:{value:this.scene.background.clone()},floorY:{value:-1}},
+      uniforms:{base:{value:this.scene.background.clone()},tint:{value:this.scene.background.clone()},zenith:{value:this.scene.background.clone()},floorY:{value:-1},dusk:{value:0},warm:{value:new THREE.Color(0x995b60)},green:{value:0},greenTint:{value:new THREE.Color(0x2b5742)}},
       vertexShader:'varying float screenY;void main(){screenY=position.y;gl_Position=vec4(position.xy,1.0,1.0);}',
-      fragmentShader:`uniform vec3 base;uniform vec3 tint;uniform float floorY;varying float screenY;
-        void main(){gl_FragColor=vec4(mix(base,tint,smoothstep(floorY,floorY+.22,screenY)),1.0);
+      fragmentShader:`uniform vec3 base;uniform vec3 tint;uniform vec3 zenith;uniform float floorY;uniform float dusk;uniform vec3 warm;uniform float green;uniform vec3 greenTint;varying float screenY;
+        void main(){float height=smoothstep(floorY+.22,max(floorY+.23,1.0),screenY);
+        vec3 sky=mix(tint,zenith,height);
+        sky=mix(sky,greenTint,green*(1.0-smoothstep(.08,.48,height)));
+        sky=mix(sky,warm,dusk*(1.0-smoothstep(.05,.45,height)));
+        gl_FragColor=vec4(mix(base,sky,smoothstep(floorY,floorY+.22,screenY)),1.0);
         #include <colorspace_fragment>
         }`
     }));
@@ -265,7 +270,7 @@ export class GarageOrbit3D {
     this.daySky.renderOrder=-10000;this.daySky.visible=false;this.scene.add(this.daySky);
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
     try {
-      this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'low-power' });
+      this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, stencil: true, powerPreference: 'low-power' });
       this.renderPixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
       this.renderer.setPixelRatio(this.renderPixelRatio);
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -435,7 +440,7 @@ export class GarageOrbit3D {
     this.flyAzimuth += seconds * 6 * RAD;
     const sunElevation = this.data?.sun?.elevation;
     const nightScale = Number.isFinite(sunElevation)
-      ? THREE.MathUtils.lerp(.75, 1, THREE.MathUtils.smoothstep(sunElevation, -6, 6)) : 1;
+      ? THREE.MathUtils.lerp(.60, 1, THREE.MathUtils.smoothstep(sunElevation, -6, 6)) : 1;
     const targetElevation = (32 + 17 * Math.sin(this.flyElapsed * Math.PI * 2 / 100)) * RAD * nightScale * .85;
     const elevation = THREE.MathUtils.lerp(this.flyStartElevation, targetElevation, 1 - Math.exp(-this.flyElapsed / 3));
     this.flyElevation = elevation;
@@ -526,6 +531,7 @@ export class GarageOrbit3D {
         this.weather?.frame(this.data?.weather, weatherLive, seconds, this.data?.sun?.elevation,
           this.lightningEnabled && !this.reducedMotion && this.playing, this.data);
         this.updatePanelReflection(weatherLive);
+        this.updateGroundShadow(weatherLive);
         this.updateDaySky(weatherLive);
         this.updateSunAppearance(weatherLive);
         this.renderer.render(this.scene, this.camera);
@@ -841,6 +847,8 @@ export class GarageOrbit3D {
       row.append(name, number); times.append(row);
     }
     const metrics = this.root.querySelector('.expanded-metrics');
+    if (data?.locationLabel) metrics.dataset.liveLocation = data.locationLabel;
+    else delete metrics.dataset.liveLocation;
     metrics.replaceChildren();
     for (const metric of data?.metrics || []) {
       const item = document.createElement('div'); item.className = 'expanded-metric';
@@ -896,6 +904,7 @@ export class GarageOrbit3D {
       const roof = this.mesh(new THREE.BoxGeometry(half / Math.cos(pitch * RAD) + 0.28, 0.11, length + 0.4), 0xae5e4f,
         new THREE.Vector3(side * half / 2, ridge - half / 2 * slope, 0));
       roof.rotation.z = -side * pitch * RAD;
+      roof.name = 'garage-roof';
       const shape = new THREE.Shape();
       shape.moveTo(-half, wallHeight); shape.lineTo(half, wallHeight); shape.lineTo(0, ridge); shape.closePath();
       this.mesh(new THREE.ShapeGeometry(shape), 0x805333, new THREE.Vector3(0, 0, side * (length / 2 + 0.005)));
@@ -912,6 +921,7 @@ export class GarageOrbit3D {
         this.building.add(panel);
         const w = (half - 0.4) / 3 / Math.cos(pitch * RAD) - 0.08;
         const l = (length - 0.4) / 3 - 0.09;
+        panel.userData.shadowSize = [w,l];
         this.mesh(new THREE.BoxGeometry(w, 0.045, l), 0xaebfc7, new THREE.Vector3(), panel);
         this.mesh(new THREE.BoxGeometry(w - 0.055, 0.012, l - 0.055), 0x142a3a, new THREE.Vector3(0, 0.03, 0), panel);
         for (let cell = 1; cell < 6; cell++) {
@@ -953,6 +963,123 @@ export class GarageOrbit3D {
       this.flightFloor.push(new THREE.Vector3(x, flightBounds.min.y, z));
     }
     this.makeNeighborhood(model.surroundings);
+    this.prepareGarageShadowReceivers(width,length,wallHeight,ridge);
+    this.prepareGroundShadow(width, length, wallHeight, ridge);
+  }
+
+  prepareGarageShadowReceivers(width,length,wallHeight,ridge) {
+    this.garageShadowReceivers=[];
+    const add=(points,normal,kind,matrix=this.building.matrixWorld)=>{
+      const vertices=points.map(p=>new THREE.Vector3(...p).applyMatrix4(matrix));
+      const n=new THREE.Vector3(...normal).transformDirection(matrix);
+      this.garageShadowReceivers.push(makeShadowReceiver(vertices,n,kind));
+    };
+    const half=width/2,end=length/2;
+    for(const side of [-1,1]){
+      const x=side*(half+.003),z=side*(end+.008);
+      add([[x,0,-end],[x,0,end],[x,wallHeight,end],[x,wallHeight,-end]],[side,0,0],'wall');
+      add([[-half,0,z],[half,0,z],[half,wallHeight,z],[0,ridge,z],[-half,wallHeight,z]],[0,0,side],'wall');
+    }
+    for(const object of this.building.children){
+      if(object.name==='garage-roof'){
+        const {width:w,height:h,depth:d}=object.geometry.parameters,y=h/2+.003;
+        add([[-w/2,y,-d/2],[w/2,y,-d/2],[w/2,y,d/2],[-w/2,y,d/2]],[0,1,0],'roof',object.matrixWorld);
+      }else if(object.name==='pv-module'){
+        const [w,d]=object.userData.shadowSize,y=.048;
+        add([[-w/2,y,-d/2],[w/2,y,-d/2],[w/2,y,d/2],[-w/2,y,d/2]],[0,1,0],'panel',object.matrixWorld);
+      }else if(object.name==='garage-door'){
+        const {width:w,height:h,depth:d}=object.geometry.parameters,z=-d/2-.014;
+        add([[-w/2,-h/2,z],[w/2,-h/2,z],[w/2,h/2,z],[-w/2,h/2,z]],[0,0,-1],'door',object.matrixWorld);
+      }else if(object.name==='rear-person-door'){
+        const frame=object.children[0],{width:w,height:h,depth:d}=frame.geometry.parameters,z=d/2+.025;
+        add([[-w/2,-h/2,z],[w/2,-h/2,z],[w/2,h/2,z],[-w/2,h/2,z]],[0,0,1],'door',frame.matrixWorld);
+      }
+    }
+  }
+
+  prepareGroundShadow(width, length, wallHeight, ridge) {
+    if (!this.groundShadow) {
+      const geometry = new THREE.BufferGeometry();
+      geometry.setDrawRange(0, 0);
+      this.groundShadow = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+        color: 0x020508, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true,
+        // Mark each covered pixel once; overlapping house shadows must not blend twice.
+        stencilWrite: true, stencilWriteMask: 1, stencilFuncMask: 1,
+        stencilRef: 0, stencilFunc: THREE.EqualStencilFunc,
+        stencilFail: THREE.KeepStencilOp, stencilZFail: THREE.KeepStencilOp, stencilZPass: THREE.IncrementWrapStencilOp
+      }));
+      this.groundShadow.name = 'garage-ground-shadow';
+      this.groundShadow.visible = false;
+      this.scene.add(this.groundShadow);
+    }
+    const floats=(30*21+this.garageShadowReceivers.length*20*90)*3;
+    if(this.groundShadow.geometry.attributes.position?.array.length!==floats){
+      this.groundShadow.geometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(floats),3).setUsage(THREE.DynamicDrawUsage));
+    }
+    // World-space roof silhouette; kept outside building bounds and sky zoom groups.
+    this.groundShadowPoints = [];
+    for (const y of [0, wallHeight]) for (const x of [-width/2-.14, width/2+.14]) for (const z of [-length/2-.2, length/2+.2]) {
+      this.groundShadowPoints.push(new THREE.Vector3(x,y,z).applyMatrix4(this.building.matrixWorld));
+    }
+    for (const z of [-length/2-.2, length/2+.2]) this.groundShadowPoints.push(new THREE.Vector3(0,ridge+.06,z).applyMatrix4(this.building.matrixWorld));
+    this.groundShadowHeight = ridge+.06;
+    this.groundShadowAzimuth = this.groundShadowElevation = this.groundShadowHouseMask = undefined;
+  }
+
+  updateGroundShadow(live) {
+    const mesh=this.groundShadow, sun=this.data?.sun, strength=this.data?.weather?.sun;
+    if (!mesh) return;
+    const valid=live && Number.isFinite(sun?.azimuth) && Number.isFinite(sun?.elevation)
+      && sun.elevation>0;
+    mesh.visible=!!valid;
+    if (!valid) return;
+    const sunlight=Number.isFinite(strength)?THREE.MathUtils.clamp(strength,0,1):0;
+    // Reuse the smoothed PV inputs; the stronger roof indicates sunshine, not their sum.
+    const weather=this.data?.weather;
+    const east=Number.isFinite(weather?.pvEastWatts)?Math.max(0,weather.pvEastWatts):null;
+    const west=Number.isFinite(weather?.pvWestWatts)?Math.max(0,weather.pvWestWatts):null;
+    const watts=east!==null||west!==null?Math.max(east??0,west??0):null;
+    const opacity=watts===null?.18+.24*sunlight:.18+.4*THREE.MathUtils.clamp(watts/3000,0,1);
+    mesh.material.opacity=opacity*THREE.MathUtils.smoothstep(sun.elevation,0,5);
+    let houseMask=0;
+    if(this.neighborhood?.visible)for(let i=0;i<this.neighborMeshes.length;i++)if(this.neighborMeshes[i].visible)houseMask|=1<<i;
+    if (this.groundShadowAzimuth===sun.azimuth && this.groundShadowElevation===sun.elevation && this.groundShadowHouseMask===houseMask) return;
+    this.groundShadowAzimuth=sun.azimuth;this.groundShadowElevation=sun.elevation;this.groundShadowHouseMask=houseMask;
+    const direction=skyVector(sun.azimuth,0,1);
+    const solarCot=1/Math.tan(Math.min(sun.elevation,90)*RAD);
+    const cross=(a,b,c)=>(b.x-a.x)*(c.z-a.z)-(b.z-a.z)*(c.x-a.x);
+    const position=mesh.geometry.attributes.position;
+    let n=0;
+    const append=(profile,height,limit)=>{
+      const cot=Math.min(solarCot,limit/Math.max(height,.01));
+      const points=profile.map(p=>({x:p.x-direction.x*Math.max(0,p.y)*cot,z:p.z-direction.z*Math.max(0,p.y)*cot})).sort((a,b)=>a.x-b.x||a.z-b.z);
+      const lower=[],upper=[];
+      for(const p of points){while(lower.length>=2&&cross(lower.at(-2),lower.at(-1),p)<=0)lower.pop();lower.push(p);}
+      for(let i=points.length-1;i>=0;i--){const p=points[i];while(upper.length>=2&&cross(upper.at(-2),upper.at(-1),p)<=0)upper.pop();upper.push(p);}
+      const hull=lower.slice(0,-1).concat(upper.slice(0,-1));
+      for(let i=1;i<hull.length-1;i++)for(const p of [hull[0],hull[i],hull[i+1]])position.setXYZ(n++,p.x,.006,p.z);
+    };
+    append(this.groundShadowPoints,this.groundShadowHeight,18);
+    // Existing visible house models share this buffer and material: still one draw.
+    for(let i=0;i<this.neighborMeshes.length;i++)if(houseMask&(1<<i)){
+      const house=this.neighborMeshes[i].userData;
+      append(house.groundShadowPoints,house.groundShadowHeight,36);
+    }
+    this.groundShadowVertexCount=n;
+    this.surfaceShadowCounts={};
+    const sunlightDirection=skyVector(sun.azimuth,sun.elevation,1);
+    for(let i=0;i<this.neighborMeshes.length;i++)if(houseMask&(1<<i)){
+      const points=this.neighborMeshes[i].userData.groundShadowPoints;
+      for(const receiver of this.garageShadowReceivers){
+        const polygon=projectHouseShadow(receiver,points,sunlightDirection);
+        if(polygon.length<3)continue;
+        const count=(polygon.length-2)*3;
+        if(n+count>position.count)throw new Error('Garage surface shadow capacity exceeded');
+        for(let j=1;j<polygon.length-1;j++)for(const p of [polygon[0],polygon[j],polygon[j+1]])position.setXYZ(n++,p.x,p.y,p.z);
+        this.surfaceShadowCounts[receiver.kind]=(this.surfaceShadowCounts[receiver.kind]||0)+count;
+      }
+    }
+    position.needsUpdate=true;mesh.geometry.setDrawRange(0,n);mesh.geometry.computeBoundingSphere();
   }
 
   batchPanelMeshes() {
@@ -1011,7 +1138,9 @@ export class GarageOrbit3D {
       this.pvReflections[side]=amount;
       // Two fixed glass batches reuse the scene light; only one additional draw call.
       // Lift medium output visibly without changing the watt scale or its smoothing.
-      const shine=.85*Math.sqrt(amount);
+      // Both roofs stay nearly matte at low output; join the existing curve at1000W.
+      const lowPower=THREE.MathUtils.smoothstep(amount,0,1/3);
+      const shine=.85*Math.sqrt(amount)*lowPower;
       material.roughness=.8-.64*shine;
       material.metalness=.12+.22*shine;
       material.color.setHex(0x142a3a).lerp(new THREE.Color(0x9bccdf),shine*.54);
@@ -1024,20 +1153,30 @@ export class GarageOrbit3D {
     const weather=this.data?.weather,elevation=this.data?.sun?.elevation;
     const day=live&&Number.isFinite(elevation)?THREE.MathUtils.smoothstep(elevation,0,12):0;
     const condition=weather?.condition;
-    let tint=0x596d7a;
-    if(weather?.fog||condition==='fog')tint=0x849096;
-    else if(condition==='lightning'||condition==='lightning-rainy')tint=0x303b48;
-    else if(condition==='pouring')tint=0x424f5c;
-    else if(condition==='snowy'||condition==='snowy-rainy')tint=0x87949d;
-    else if(weather?.rain||condition==='rainy')tint=0x536270;
-    else if(condition==='cloudy')tint=0x687784;
-    else if(condition==='partlycloudy')tint=0x607581;
-    else if(condition==='sunny'||condition==='clear-night')tint=0x526f83;
-    this.daySky.visible=day>0&&!!this.flightFloor?.length;
+    let tint=0x596d7a,zenith=0x2c414e;
+    if(weather?.fog||condition==='fog'){tint=0x849096;zenith=0x3b454d;}
+    else if(condition==='lightning'||condition==='lightning-rainy'){tint=0x26323f;zenith=0x14202c;}
+    else if(condition==='pouring'){tint=0x3c4854;zenith=0x202b35;}
+    else if(condition==='snowy'||condition==='snowy-rainy'){tint=0x87949d;zenith=0x444e58;}
+    else if(weather?.rain||condition==='rainy'){tint=0x4b5966;zenith=0x25313b;}
+    else if(condition==='cloudy'){tint=0x687784;zenith=0x35414c;}
+    else if(condition==='partlycloudy'){tint=0x607581;zenith=0x345772;}
+    else if(condition==='sunny'||condition==='clear-night'){tint=0x55758b;zenith=0x376c98;}
+    const clear=!weather?.fog&&!weather?.rain&&['sunny','clear-night','partlycloudy'].includes(condition);
+    const twilight=live&&clear&&Number.isFinite(elevation)
+      ? THREE.MathUtils.smoothstep(elevation,-6,0)*(1-THREE.MathUtils.smoothstep(elevation,0,6)):0;
+    const light=Math.max(day,.75*twilight);
+    const normalDay=!weather?.fog&&!weather?.rain&&['sunny','clear-night','partlycloudy','cloudy'].includes(condition);
+    const green=live&&normalDay&&Number.isFinite(elevation)?.72*THREE.MathUtils.smoothstep(elevation,6,12):0;
+    this.daySky.visible=light>0&&!!this.flightFloor?.length;
     if(!this.daySky.visible)return;
-    if(this.skyTint!==tint||this.skyDay!==day){
-      this.skyTint=tint;this.skyDay=day;
-      this.daySky.material.uniforms.tint.value.setHex(0x101820).lerp(this.daySkyTint.setHex(tint),day*.088);
+    if(this.skyTint!==tint||this.skyDay!==day||this.skyTwilight!==twilight||this.skyGreen!==green){
+      this.skyTint=tint;this.skyDay=day;this.skyTwilight=twilight;this.skyGreen=green;
+      // Separate lower bands: green by day, unchanged red at twilight, blue zenith.
+      this.daySky.material.uniforms.tint.value.setHex(0x101820).lerp(this.daySkyTint.setHex(tint),light*.088);
+      this.daySky.material.uniforms.zenith.value.setHex(zenith).lerp(this.scene.background,1-light);
+      this.daySky.material.uniforms.dusk.value=.65*twilight;
+      this.daySky.material.uniforms.green.value=green;
     }
     // One background triangle; the foreground below the projected slab stays neutral.
     this.camera.updateMatrixWorld();
@@ -1202,6 +1341,11 @@ export class GarageOrbit3D {
       const mesh = new THREE.Mesh(geometry, material);
       mesh.name = 'estimated-neighbor'; mesh.userData.label = name;
       mesh.position.set(east, ground, -north); mesh.rotation.y = (90 - azimuth) * RAD;
+      mesh.updateMatrix();
+      mesh.userData.groundShadowPoints=[];
+      for(const y of [0,wall])for(const x of [-width/2,width/2])for(const z of [-length/2,length/2])mesh.userData.groundShadowPoints.push(new THREE.Vector3(x,y,z).applyMatrix4(mesh.matrix));
+      for(const z of [-length/2,length/2])mesh.userData.groundShadowPoints.push(new THREE.Vector3(0,ridge,z).applyMatrix4(mesh.matrix));
+      mesh.userData.groundShadowHeight=Math.max(.01,ground+ridge);
       mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry),
         new THREE.LineBasicMaterial({ color: tint ?? 0xb7d0da, transparent: true, opacity: 0.48, depthWrite: false })));
       this.neighborhood.add(mesh); this.neighborMeshes.push(mesh);
@@ -1209,6 +1353,7 @@ export class GarageOrbit3D {
     this.neighborhood.visible = enabled;
     this.prepareStaticTransforms(this.neighborhood);
     this.houseDayKey = undefined;
+    this.groundShadowHouseMask = undefined;
     this.root.querySelector('.house-mode').hidden = !this.neighborMeshes.length;
   }
 
@@ -1788,6 +1933,10 @@ export class GarageOrbit3D {
     if (this.disposed) return;
     if (this.annualPreview?.deferUpdate(data)) return;
     this.data = data;
+    if (data.location?.id && this.annualPreview) {
+      this.annualPreview.locationId = data.location.id;
+      this.annualPreview.locationSelect.value = data.location.id;
+    }
     const previousRadius = this.skyRadius;
     this.updateExpandedDetails(data.display);
     const geometryKey = JSON.stringify(data.model);
