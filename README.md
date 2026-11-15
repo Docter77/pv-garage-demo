@@ -1,5 +1,36 @@
 # PV Flow + Garage Sun & Moon
 
+### House Shadows (15 November 2026, revision328)
+
+Garage visuals now match revision328 of the reference dashboard:
+
+- Exactly one **fictional house east of the garage** demonstrates morning
+  shadows on the roof, panels, walls and doors. No real neighboring geometry
+  is included. Select a spring/summer morning with the date/time controls to
+  explore it. The house visibility control also removes its shadow.
+- Ground and garage-surface shadows share one cached mesh/draw. Overlapping
+  shadows do not accumulate darkness. Strength follows the stronger synthetic
+  PV side (0..3000 W), with a daylight base. No shadow maps or extra timers.
+- Near-zero panel highlights at200 W, brighter catalog stars fully visible
+  at solar elevation-6 degrees, and a flatter night camera flight.
+- Weather-specific blue upper sky, a dark green daytime horizon and a narrow
+  red twilight band. The windsock remains in front of the background sky.
+- Location selection is shared by compact/expanded views and annual preview.
+  All weather and power remain synthetic at every example location.
+
+The earlier revision notes below are historical. This update supersedes their
+sky colors, low-power reflection curve, star fade and flight angles. Shadows
+use approximate geometry, not an engineering solar-access calculation.
+
+### Gradient Sky (14 November 2026, revision313)
+
+The dark horizon now transitions smoothly to a lighter, bluer upper sky in
+sunny weather. Clouds, rain, fog, snow and storms use muted weather-specific
+upper colors. The existing foreground below the garage footprint stays dark;
+night and annual preview are unchanged. The existing background shader handles
+the gradient: no additional draw calls, geometry, timers or sensor requests.
+Revision312's darker panels and reduced highlights remain unchanged.
+
 ### Visual Update (14 November 2026)
 
 Garage visuals match revision312 of the reference dashboard, with English
